@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<h1>Bulk Add Portal URLs</h1>
+<p>Paste one URL per line. The domain is auto-extracted as the portal key and the correct generic scraper is assigned automatically.</p>
+
+<form method="post">
+  {% csrf_token %}
+  <div style="margin: 16px 0;">
+    <label style="font-weight:bold;display:block;margin-bottom:6px;">Source Type</label>
+    <select name="source_type" style="padding:6px 12px;border:1px solid #ccc;border-radius:4px;font-size:14px;">
+      {% for value, label in source_type_choices %}
+        <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="margin: 16px 0;">
+    <label style="font-weight:bold;display:block;margin-bottom:6px;">Portal URLs (one per line)</label>
+    <textarea name="urls" rows="20" style="width:100%;max-width:700px;font-family:monospace;font-size:13px;padding:10px;border:1px solid #ccc;border-radius:4px;"
+      placeholder="https://mahatenders.gov.in/nicgep/app
+https://eprocure.gov.in/eprocure/app
+https://tenderwizard.com/KERALA
+https://etender.up.nic.in/nicgep/app
+..."></textarea>
+  </div>
+  <button type="submit" class="button default">Add URLs</button>
+  &nbsp;
+  <a href="../" class="button">Cancel</a>
+</form>
+{% endblock %}
