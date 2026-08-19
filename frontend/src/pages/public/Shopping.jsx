@@ -1,8 +1,48 @@
-import { useState, useEffect } from 'react'
-import { ExternalLink, ShoppingBag, Globe, Shirt, Footprints, Smartphone, ShoppingCart, Sparkles, Pill, Home, Gem, BookOpen, Baby, Dumbbell, Glasses, RefreshCw, Briefcase, PackageSearch, BadgeCheck } from 'lucide-react'
+/**
+ * Shopping.jsx
+ *
+ * Public directory page mounted at `/shopping` (see App.jsx). Combines three
+ * layers: (1) a static, hand-curated directory of Indian online stores
+ * grouped by category (SHOPPING_GROUPS below); (2) an affiliate layer that
+ * tags outbound links to known merchants with an Amazon Associates or
+ * Cuelinks/EarnKaro badge (STATIC_AFFILIATE_MAP + affiliateUrl()); and (3)
+ * "featured" stores that are actual StepsDoor storefront subscribers
+ * (fetched live via storeService.list()), rendered with a click-tracking
+ * redirect. Supports category filtering (sidebar/pill strip) and search
+ * spanning both the static directory and subscribed stores.
+ */
+import { useState, useEffect, useCallback } from 'react'
+import { ExternalLink, ShoppingBag, Globe, Shirt, Footprints, Smartphone, ShoppingCart, Sparkles, Pill, Home, Gem, BookOpen, Baby, Dumbbell, Glasses, RefreshCw, Briefcase, PackageSearch, BadgeCheck, Search, Tag } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { storeService } from '@/services/storeService'
 
+// Append Amazon Associates tag to amazon.in / amzn.in URLs when configured.
+// All other merchant links are handled automatically by the Cuelinks JS (loaded in App.jsx).
+const _AMAZON_TAG = import.meta.env.VITE_AMAZON_AFFILIATE_TAG || ''
+/**
+ * Rewrites a store URL to include the Amazon Associates tag when the URL
+ * points at amazon.in/amzn.in and a tag is configured; otherwise returns
+ * the URL unchanged (non-Amazon affiliate tagging is handled by the
+ * Cuelinks script injected globally in App.jsx, not per-link here).
+ * @param {string} url - the store's outbound URL
+ * @returns {string} the URL, with `?tag=` appended when applicable
+ */
+function affiliateUrl(url) {
+  if (_AMAZON_TAG && /amazon\.in|amzn\.in/i.test(url)) {
+    try {
+      const u = new URL(url)
+      u.searchParams.set('tag', _AMAZON_TAG)
+      return u.toString()
+    } catch {
+      return url
+    }
+  }
+  return url
+}
+
+// Static directory data: one entry per shopping category, each holding its
+// icon, accent color, and the list of stores shown as outbound link cards.
+// Hand-maintained content, not fetched from the backend.
 const SHOPPING_GROUPS = [
   {
     id: 'general',
@@ -256,6 +296,7 @@ const SHOPPING_GROUPS = [
   },
 ]
 
+// Per-category Tailwind class bundle keyed by the `color` name each SHOPPING_GROUPS entry declares
 const COLOR_MAP = {
   blue:   { bg: 'bg-blue-50',   text: 'text-blue-700',   icon: 'text-blue-500',   border: 'border-blue-100',   badge: 'bg-blue-100 text-blue-700',   activeBg: 'bg-blue-50',   activeText: 'text-blue-700'   },
   pink:   { bg: 'bg-pink-50',   text: 'text-pink-700',   icon: 'text-pink-500',   border: 'border-pink-100',   badge: 'bg-pink-100 text-pink-700',   activeBg: 'bg-pink-50',   activeText: 'text-pink-700'   },
@@ -277,16 +318,94 @@ const COLOR_MAP = {
 
 const totalStores = SHOPPING_GROUPS.reduce((s, g) => s + g.stores.length, 0)
 
+// Every store, flattened with its group's colour attached — used for search
+export const ALL_STORES = SHOPPING_GROUPS.flatMap(g => g.stores.map(s => ({ ...s, groupLabel: g.label, groupColor: g.color })))
+
+// ---------------------------------------------------------------------------
+// Affiliate network badges
+// ---------------------------------------------------------------------------
+
+// Label + style for each affiliate network a store card can be tagged with
+const AFFILIATE_BADGE = {
+  amazon:   { label: 'Amazon Associates', cls: 'bg-orange-100 text-orange-700 border-orange-200' },
+  cuelinks: { label: 'Cuelinks',          cls: 'bg-blue-100 text-blue-700 border-blue-200'       },
+  earnkaro: { label: 'EarnKaro',          cls: 'bg-green-100 text-green-700 border-green-200'    },
+}
+
+// Maps static store names to their affiliate network.
+// Detected at runtime — no need to touch individual store data entries.
+const STATIC_AFFILIATE_MAP = {
+  // Amazon Associates
+  'Amazon India': 'amazon', 'Amazon Books': 'amazon',
+
+  // Cuelinks — major Indian e-commerce merchants confirmed in their network
+  'Flipkart': 'cuelinks', 'Meesho': 'cuelinks', 'Snapdeal': 'cuelinks',
+  'JioMart': 'cuelinks', 'JioMart Groceries': 'cuelinks', 'Tata CLiQ': 'cuelinks',
+  'Myntra': 'cuelinks', 'AJIO': 'cuelinks', 'Nykaa Fashion': 'cuelinks',
+  'Bewakoof': 'cuelinks', 'The Souled Store': 'cuelinks', 'Snitch': 'cuelinks',
+  'Max Fashion': 'cuelinks', 'Pantaloons': 'cuelinks', 'Fabindia': 'cuelinks',
+  'Libas': 'cuelinks', 'BIBA': 'cuelinks', 'Limeroad': 'cuelinks',
+  'Bata India': 'cuelinks', 'Metro Shoes': 'cuelinks', 'Campus Shoes': 'cuelinks',
+  'Red Tape': 'cuelinks',
+  'Croma': 'cuelinks', 'Vijay Sales': 'cuelinks',
+  'boAt': 'cuelinks', 'Noise': 'cuelinks', 'Fire-Boltt': 'cuelinks',
+  'BigBasket': 'cuelinks', 'Licious': 'cuelinks', 'FreshToHome': 'cuelinks',
+  'Country Delight': 'cuelinks',
+  'Nykaa': 'cuelinks', 'Purplle': 'cuelinks', 'Tira Beauty': 'cuelinks',
+  'Mamaearth': 'cuelinks', 'SUGAR Cosmetics': 'cuelinks',
+  'The Minimalist': 'cuelinks', 'Plum Goodness': 'cuelinks',
+  'mCaffeine': 'cuelinks', 'WOW Skin Science': 'cuelinks',
+  'PharmEasy': 'cuelinks', '1mg (Tata)': 'cuelinks', 'Netmeds': 'cuelinks',
+  'Truemeds': 'cuelinks', 'HealthKart': 'cuelinks', 'MuscleBlaze': 'cuelinks',
+  'Pepperfry': 'cuelinks', 'Urban Ladder': 'cuelinks', 'Wooden Street': 'cuelinks',
+  'Wakefit': 'cuelinks', 'Sleepycat': 'cuelinks', 'Nestasia': 'cuelinks',
+  'CaratLane': 'cuelinks', 'BlueStone': 'cuelinks', 'GIVA': 'cuelinks',
+  'Melorra': 'cuelinks',
+  'Flipkart Books': 'cuelinks', 'BooksWagon': 'cuelinks', 'Crossword': 'cuelinks',
+  'FirstCry': 'cuelinks', 'Hopscotch': 'cuelinks', 'BabyHug': 'cuelinks',
+  'Decathlon India': 'cuelinks', 'Nike India': 'cuelinks',
+  'Adidas India': 'cuelinks', 'Puma India': 'cuelinks', 'Cult Sport': 'cuelinks',
+  'Lenskart': 'cuelinks', 'Titan Eye+': 'cuelinks',
+  'Titan Watches': 'cuelinks', 'Fastrack': 'cuelinks', 'Helios': 'cuelinks',
+  'Cashify': 'cuelinks', 'Cars24': 'cuelinks',
+  'Safari Industries': 'cuelinks', 'American Tourister': 'cuelinks',
+  'VIP Bags': 'cuelinks', 'Wildcraft': 'cuelinks', 'Mokobara': 'cuelinks',
+  'iHerb': 'cuelinks',
+}
+
+/**
+ * Small pill showing which affiliate network a store's outbound link is
+ * tracked through. Renders nothing if the network isn't recognised.
+ * @param {{ network: string }} props - affiliate network key (must match an AFFILIATE_BADGE entry)
+ */
+function AffiliateBadge({ network }) {
+  const b = AFFILIATE_BADGE[network]
+  if (!b) return null
+  return (
+    <span className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded border font-medium leading-none ${b.cls}`}>
+      {b.label}
+    </span>
+  )
+}
+
+/**
+ * One static-directory store: an outbound link card (routed through
+ * affiliateUrl() for Amazon tagging) with name, optional tag badge, an
+ * affiliate-network badge when the store is in STATIC_AFFILIATE_MAP, and
+ * description.
+ * @param {{ store: object, color: string }} props - store entry from SHOPPING_GROUPS and its group's color key
+ */
 function StoreCard({ store, color }) {
   const c = COLOR_MAP[color]
+  const network = STATIC_AFFILIATE_MAP[store.name]
   return (
     <a
-      href={store.url}
+      href={affiliateUrl(store.url)}
       target="_blank"
       rel="noopener noreferrer"
       className="flex items-start justify-between gap-2 p-3.5 bg-white border rounded-lg hover:shadow-md hover:border-primary/30 transition-all group"
     >
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap mb-0.5">
           <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">{store.name}</p>
           {store.tag && (
@@ -294,12 +413,22 @@ function StoreCard({ store, color }) {
           )}
         </div>
         <p className="text-xs text-muted-foreground leading-snug">{store.desc}</p>
+        {network && (
+          <div className="mt-1.5">
+            <AffiliateBadge network={network} />
+          </div>
+        )}
       </div>
       <ExternalLink className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary shrink-0 mt-0.5 transition-colors" />
     </a>
   )
 }
 
+/**
+ * One category section: a colour-coded header (icon, label, store count)
+ * followed by a grid of StoreCard entries for that group's stores.
+ * @param {{ group: object }} props - one entry from SHOPPING_GROUPS
+ */
 function StoreGroup({ group }) {
   const c = COLOR_MAP[group.color]
   const Icon = group.icon
@@ -319,13 +448,31 @@ function StoreGroup({ group }) {
   )
 }
 
+/**
+ * A StepsDoor storefront-subscriber card (as opposed to a static directory
+ * entry) — shows the store's logo/name/tagline and an affiliate badge if
+ * applicable. Clicking routes through a click-tracking redirect.
+ * @param {{ store: object }} props - a subscribed store record from storeService.list()
+ */
 function SubscribedStoreCard({ store }) {
+  // Logs the click via storeService before opening the store's site, so click-through
+  // analytics stay accurate even though we open the link ourselves. Falls back to the
+  // raw website_url if the click-tracking call fails, so the click isn't lost.
+  const handleClick = useCallback(async (e) => {
+    e.preventDefault()
+    try {
+      const { data } = await storeService.click(store.id)
+      window.open(data.redirect_url || store.website_url, '_blank', 'noopener,noreferrer')
+    } catch {
+      window.open(store.website_url, '_blank', 'noopener,noreferrer')
+    }
+  }, [store.id, store.website_url])
+
   return (
     <a
       href={store.website_url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-3 p-3 bg-white border border-border rounded-xl hover:shadow-sm hover:border-primary/30 transition-all group"
+      onClick={handleClick}
+      className="flex items-center gap-3 p-3 bg-white border border-border rounded-xl hover:shadow-sm hover:border-primary/30 transition-all group cursor-pointer"
     >
       {store.logo ? (
         <img src={store.logo} alt={store.name} className="h-10 w-10 rounded-lg object-cover shrink-0" />
@@ -340,16 +487,41 @@ function SubscribedStoreCard({ store }) {
           <BadgeCheck className="h-3.5 w-3.5 text-primary shrink-0" />
         </p>
         {store.tagline && <p className="text-xs text-muted-foreground truncate">{store.tagline}</p>}
+        {store.affiliate_network && (
+          <div className="mt-1">
+            <AffiliateBadge network={store.affiliate_network} />
+          </div>
+        )}
       </div>
       <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
     </a>
   )
 }
 
+/**
+ * Renders the shopping directory page: featured StepsDoor-subscribed stores
+ * at the top (if any), then the static category directory with a sidebar
+ * (desktop) / pill strip (mobile) filter and cross-cutting search.
+ */
 export default function Shopping() {
-  const [activeCategory, setActiveCategory] = useState('all')
-  const [subscribedStores, setSubscribedStores] = useState([])
+  const [activeCategory, setActiveCategory] = useState('all') // which static-directory category is shown ('all' or a SHOPPING_GROUPS id)
+  const [subscribedStores, setSubscribedStores] = useState([]) // live StepsDoor storefront subscribers fetched below
+  const [search, setSearch] = useState('') // search box value — spans both subscribed and static-directory stores
 
+  // Derived: collect every non-empty offers_link URL from subscribed stores, paired
+  // with the store that owns them so the card can show a store label.
+  // Each element: { url: string, storeName: string, storeLogo: string|null, storeId: number }
+  const offerEntries = subscribedStores.flatMap(store => {
+    if (!store.offers_links) return []
+    return store.offers_links
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean) // drop blank lines
+      .map(url => ({ url, storeName: store.name, storeLogo: store.logo, storeId: store.id }))
+  })
+
+  // Fetch StepsDoor's actual shopping-store subscribers once on mount; silently
+  // ignore failures so the static directory below still renders regardless.
   useEffect(() => {
     storeService.list().then(({ data }) => setSubscribedStores(data.results ?? data)).catch(() => {})
   }, [])
@@ -358,6 +530,21 @@ export default function Shopping() {
     ? SHOPPING_GROUPS
     : SHOPPING_GROUPS.filter(g => g.id === activeCategory)
 
+  // Search spans every category, ignoring whichever one is currently selected
+  const isSearching = search.trim().length > 0
+  const q = search.toLowerCase()
+  const searchedStores = ALL_STORES.filter(s =>
+    s.name.toLowerCase().includes(q) ||
+    s.desc.toLowerCase().includes(q) ||
+    s.groupLabel.toLowerCase().includes(q)
+  )
+  const searchedSubscribed = subscribedStores.filter(s =>
+    s.name.toLowerCase().includes(q) ||
+    (s.tagline && s.tagline.toLowerCase().includes(q))
+  )
+
+  // Sidebar/pill category click handler: switches the active category and either
+  // scrolls to that category's section (by DOM id) or back to the top for "all"
   function handleCategoryClick(id) {
     setActiveCategory(id)
     if (id !== 'all') {
@@ -380,13 +567,111 @@ export default function Shopping() {
         </p>
       </div>
 
-      {/* Subscribed stores (paid listings) */}
+      {/* Search — spans every category, ignoring the current sidebar selection */}
+      <div className="mb-6 relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          placeholder="Search stores or categories..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full pl-8 pr-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+        />
+      </div>
+
+      {/* Special Offers strip — shown when at least one subscribed store has offers_links set.
+          Renders a horizontally-scrollable row of offer link cards below the search bar. */}
+      {offerEntries.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <Tag className="h-4 w-4 text-orange-500" />
+            <h2 className="text-sm font-semibold text-foreground">Special Offers</h2>
+            <span className="text-xs text-muted-foreground">({offerEntries.length} deal{offerEntries.length !== 1 ? 's' : ''})</span>
+          </div>
+          {/* Horizontal scroll on small screens; wraps on desktop */}
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 sm:flex-wrap sm:overflow-visible">
+            {offerEntries.map(({ url, storeName, storeLogo, storeId }, idx) => {
+              // Extract a readable hostname label from the URL (e.g. "www.amazon.in" → "amazon.in")
+              let hostLabel = url
+              try {
+                hostLabel = new URL(url).hostname.replace(/^www\./, '')
+              } catch {
+                // keep raw url as label if parsing fails (malformed URL)
+              }
+              return (
+                <a
+                  key={`${storeId}-${idx}`}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 bg-orange-50 border border-orange-200 rounded-xl hover:bg-orange-100 hover:border-orange-300 hover:shadow-sm transition-all group min-w-0 max-w-[220px]"
+                >
+                  {/* Store logo thumbnail or fallback tag icon */}
+                  {storeLogo ? (
+                    <img src={storeLogo} alt={storeName} className="h-7 w-7 rounded-md object-cover shrink-0" />
+                  ) : (
+                    <div className="h-7 w-7 rounded-md bg-orange-200 flex items-center justify-center shrink-0">
+                      <Tag className="h-3.5 w-3.5 text-orange-600" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    {/* Store name in bold above the URL host label */}
+                    <p className="text-xs font-semibold text-orange-900 truncate leading-tight">{storeName}</p>
+                    <p className="text-[10px] text-orange-600 truncate leading-tight">{hostLabel}</p>
+                  </div>
+                  <ExternalLink className="h-3 w-3 text-orange-400 group-hover:text-orange-600 shrink-0 transition-colors ml-auto" />
+                </a>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* While searching, show a flat cross-section of subscribed + directory results instead of the normal browse layout */}
+      {isSearching ? (
+        <div>
+          <p className="text-xs text-muted-foreground mb-4">
+            {searchedSubscribed.length + searchedStores.length} result{(searchedSubscribed.length + searchedStores.length) !== 1 ? 's' : ''} for &ldquo;{search}&rdquo;
+          </p>
+          {searchedSubscribed.length === 0 && searchedStores.length === 0 ? (
+            <div className="py-16 text-center text-muted-foreground">No stores match your search.</div>
+          ) : (
+            <div className="space-y-8">
+              {searchedSubscribed.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-bold text-primary mb-3 flex items-center gap-1.5">
+                    <BadgeCheck className="h-4 w-4" /> Featured Stores on StepsDoor
+                  </h2>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {searchedSubscribed.map(store => (
+                      <SubscribedStoreCard key={store.id} store={store} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {searchedStores.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-bold text-foreground mb-3">Store Directory</h2>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {searchedStores.map(s => (
+                      <StoreCard key={s.name + s.groupLabel} store={s} color={s.groupColor} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+      <>
+
+      {/* Subscribed stores (paid listings) — only rendered once the fetch above resolves with results */}
       {subscribedStores.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold flex items-center gap-1.5">
               <BadgeCheck className="h-4 w-4 text-primary" />
-              Featured Stores on Linksdoor
+              Featured Stores on StepsDoor
             </h2>
             <Link to="/register" className="text-xs text-primary hover:underline">List your store</Link>
           </div>
@@ -411,6 +696,7 @@ export default function Shopping() {
         >
           All ({totalStores})
         </button>
+        {/* One pill per category, highlighted when active — mirrors the desktop sidebar below */}
         {SHOPPING_GROUPS.map(g => {
           const c = COLOR_MAP[g.color]
           const isActive = activeCategory === g.id
@@ -453,6 +739,7 @@ export default function Shopping() {
 
               <div className="my-1 border-t" />
 
+              {/* One nav item per category, each showing its icon, label, and store count */}
               {SHOPPING_GROUPS.map(g => {
                 const c = COLOR_MAP[g.color]
                 const Icon = g.icon
@@ -477,25 +764,22 @@ export default function Shopping() {
           </div>
         </aside>
 
-        {/* Main content */}
+        {/* Main content — renders every category section (or just the selected one) */}
         <div className="flex-1 min-w-0 space-y-10">
           {visibleGroups.map(g => (
             <StoreGroup key={g.id} group={g} />
           ))}
-
-          {/* Footer */}
-          <div className="border-t pt-6 space-y-3">
-            <p className="text-xs text-muted-foreground text-center">
-              Linksdoor links directly to official store websites. We are not affiliated with any listed retailer.
-              Always verify prices and seller ratings before purchasing.
-            </p>
-            <div className="bg-amber-50 border border-amber-100 rounded-lg px-4 py-3 text-xs text-amber-800 text-center">
-              <span className="font-semibold">Affiliate opportunity:</span> Every store above runs an affiliate program
-              (Amazon Associates, Flipkart Affiliate, or aggregators like Cuelinks/EarnKaro covering most of the list).
-              Wrapping redirects in affiliate links makes this section self-funding — worth adding before launch.
-            </div>
-          </div>
         </div>
+      </div>
+      </>
+      )}
+
+      {/* Footer */}
+      <div className="border-t pt-6 space-y-3 mt-10">
+        <p className="text-xs text-muted-foreground text-center">
+          StepsDoor links to official store websites. Some links may be affiliate links — we may earn a small
+          commission at no extra cost to you. Always verify prices and seller ratings before purchasing.
+        </p>
       </div>
     </div>
   )
