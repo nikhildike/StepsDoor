@@ -18,6 +18,7 @@ import { TendersStackNavigator } from './TendersStackNavigator';
 import { GovtJobsStackNavigator } from './GovtJobsStackNavigator';
 import { SearchScreen } from '@/screens/jobs/SearchScreen';
 import { ShoppingScreen } from '@/screens/shopping/ShoppingScreen';
+import { RetailStoresScreen } from '@/screens/retail/RetailStoresScreen';
 import { AlertsScreen } from '@/screens/seeker/AlertsScreen';
 import { ProfileScreen } from '@/screens/seeker/ProfileScreen';
 import { Colors } from '@/theme/colors';
@@ -33,6 +34,7 @@ const TAB_ICONS: Record<string, string> = {
   Tenders: 'document-text-outline',
   'Govt Jobs': 'school-outline',
   Shopping: 'cart-outline',
+  Retail: 'storefront-outline',
   Alerts: 'notifications-outline',
   Profile: 'person-outline',
 };
@@ -77,6 +79,8 @@ export function AppNavigator() {
       <Tab.Screen name="Govt Jobs" component={GovtJobsStackNavigator} />
       {/* Tab "Shopping" -> ShoppingScreen (@/screens/shopping/ShoppingScreen), single screen, no nested stack. Icon: cart-outline. */}
       <Tab.Screen name="Shopping" component={ShoppingScreen} />
+      {/* Tab "Retail" -> RetailStoresScreen (@/screens/retail/RetailStoresScreen), single screen, no nested stack. Icon: storefront-outline. */}
+      <Tab.Screen name="Retail" component={RetailStoresScreen} />
       {/* Tab "Alerts" -> AlertsScreen (@/screens/seeker/AlertsScreen), single screen, no nested stack. Icon: notifications-outline. */}
       <Tab.Screen name="Alerts" component={AlertsScreen} />
       {/* Tab "Profile" -> ProfileScreen (@/screens/seeker/ProfileScreen), single screen, no nested stack. Icon: person-outline. */}
