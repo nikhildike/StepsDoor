@@ -11,8 +11,8 @@
  * redirect. Supports category filtering (sidebar/pill strip) and search
  * spanning both the static directory and subscribed stores.
  */
-import { useState, useEffect, useCallback } from 'react'
-import { ExternalLink, ShoppingBag, Globe, Shirt, Footprints, Smartphone, ShoppingCart, Sparkles, Pill, Home, Gem, BookOpen, Baby, Dumbbell, Glasses, RefreshCw, Briefcase, PackageSearch, BadgeCheck, Search, Tag } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { ExternalLink, ShoppingBag, Globe, Shirt, Footprints, Smartphone, ShoppingCart, Sparkles, Pill, Home, Gem, BookOpen, Baby, Dumbbell, Glasses, RefreshCw, Briefcase, PackageSearch, BadgeCheck, Search, Tag, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { storeService } from '@/services/storeService'
 
@@ -503,10 +503,95 @@ function SubscribedStoreCard({ store }) {
  * at the top (if any), then the static category directory with a sidebar
  * (desktop) / pill strip (mobile) filter and cross-cutting search.
  */
+/**
+ * Modal overlay that lists all Special Offer links from subscribed stores.
+ * Closes on backdrop click, Escape key, or the X button.
+ * @param {{ entries: Array, onClose: function }} props
+ */
+function SpecialOffersModal({ entries, onClose }) {
+  const overlayRef = useRef(null)
+
+  // Close on Escape key
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // Prevent body scroll while modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  return (
+    /* Full-screen backdrop */
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={e => { if (e.target === overlayRef.current) onClose() }}
+    >
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+
+        {/* Modal header */}
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b">
+          <Tag className="h-4 w-4 text-orange-500 shrink-0" />
+          <h2 className="text-sm font-bold text-foreground flex-1">Special Offers</h2>
+          <span className="text-xs text-muted-foreground mr-2">
+            {entries.length} deal{entries.length !== 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-gray-100 transition-colors"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Scrollable offer list */}
+        <div className="overflow-y-auto p-5">
+          <div className="grid sm:grid-cols-2 gap-3">
+            {entries.map(({ url, storeName, storeLogo, storeId }, idx) => {
+              // Extract a readable hostname label (e.g. "www.amazon.in" → "amazon.in")
+              let hostLabel = url
+              try { hostLabel = new URL(url).hostname.replace(/^www\./, '') } catch { /* keep raw url */ }
+              return (
+                <a
+                  key={`${storeId}-${idx}`}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl hover:bg-orange-100 hover:border-orange-300 hover:shadow-sm transition-all group"
+                >
+                  {/* Store logo thumbnail or fallback tag icon */}
+                  {storeLogo ? (
+                    <img src={storeLogo} alt={storeName} className="h-8 w-8 rounded-lg object-cover shrink-0" />
+                  ) : (
+                    <div className="h-8 w-8 rounded-lg bg-orange-200 flex items-center justify-center shrink-0">
+                      <Tag className="h-4 w-4 text-orange-600" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-orange-900 truncate leading-tight">{storeName}</p>
+                    <p className="text-[11px] text-orange-600 truncate leading-tight">{hostLabel}</p>
+                  </div>
+                  <ExternalLink className="h-3.5 w-3.5 text-orange-400 group-hover:text-orange-600 shrink-0 transition-colors" />
+                </a>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Shopping() {
   const [activeCategory, setActiveCategory] = useState('all') // which static-directory category is shown ('all' or a SHOPPING_GROUPS id)
   const [subscribedStores, setSubscribedStores] = useState([]) // live StepsDoor storefront subscribers fetched below
   const [search, setSearch] = useState('') // search box value — spans both subscribed and static-directory stores
+  const [offersModalOpen, setOffersModalOpen] = useState(false) // controls the Special Offers modal
 
   // Derived: collect every non-empty offers_link URL from subscribed stores, paired
   // with the store that owns them so the card can show a store label.
@@ -565,6 +650,19 @@ export default function Shopping() {
         <p className="text-muted-foreground text-sm">
           {totalStores} online stores across {SHOPPING_GROUPS.length} categories — all direct links to official Indian shopping sites.
         </p>
+        {/* Special Offers trigger — only shown when subscribed stores have offer links */}
+        {offerEntries.length > 0 && (
+          <button
+            onClick={() => setOffersModalOpen(true)}
+            className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-orange-50 border border-orange-200 rounded-xl text-sm font-semibold text-orange-700 hover:bg-orange-100 hover:border-orange-300 transition-colors"
+          >
+            <Tag className="h-4 w-4 text-orange-500" />
+            Special Offers
+            <span className="ml-0.5 text-xs font-normal text-orange-500">
+              {offerEntries.length} deal{offerEntries.length !== 1 ? 's' : ''}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Search — spans every category, ignoring the current sidebar selection */}
@@ -579,52 +677,9 @@ export default function Shopping() {
         />
       </div>
 
-      {/* Special Offers strip — shown when at least one subscribed store has offers_links set.
-          Renders a horizontally-scrollable row of offer link cards below the search bar. */}
-      {offerEntries.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <Tag className="h-4 w-4 text-orange-500" />
-            <h2 className="text-sm font-semibold text-foreground">Special Offers</h2>
-            <span className="text-xs text-muted-foreground">({offerEntries.length} deal{offerEntries.length !== 1 ? 's' : ''})</span>
-          </div>
-          {/* Horizontal scroll on small screens; wraps on desktop */}
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 sm:flex-wrap sm:overflow-visible">
-            {offerEntries.map(({ url, storeName, storeLogo, storeId }, idx) => {
-              // Extract a readable hostname label from the URL (e.g. "www.amazon.in" → "amazon.in")
-              let hostLabel = url
-              try {
-                hostLabel = new URL(url).hostname.replace(/^www\./, '')
-              } catch {
-                // keep raw url as label if parsing fails (malformed URL)
-              }
-              return (
-                <a
-                  key={`${storeId}-${idx}`}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 bg-orange-50 border border-orange-200 rounded-xl hover:bg-orange-100 hover:border-orange-300 hover:shadow-sm transition-all group min-w-0 max-w-[220px]"
-                >
-                  {/* Store logo thumbnail or fallback tag icon */}
-                  {storeLogo ? (
-                    <img src={storeLogo} alt={storeName} className="h-7 w-7 rounded-md object-cover shrink-0" />
-                  ) : (
-                    <div className="h-7 w-7 rounded-md bg-orange-200 flex items-center justify-center shrink-0">
-                      <Tag className="h-3.5 w-3.5 text-orange-600" />
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    {/* Store name in bold above the URL host label */}
-                    <p className="text-xs font-semibold text-orange-900 truncate leading-tight">{storeName}</p>
-                    <p className="text-[10px] text-orange-600 truncate leading-tight">{hostLabel}</p>
-                  </div>
-                  <ExternalLink className="h-3 w-3 text-orange-400 group-hover:text-orange-600 shrink-0 transition-colors ml-auto" />
-                </a>
-              )
-            })}
-          </div>
-        </div>
+      {/* Special Offers modal — rendered at root level so it sits above all content */}
+      {offersModalOpen && (
+        <SpecialOffersModal entries={offerEntries} onClose={() => setOffersModalOpen(false)} />
       )}
 
       {/* While searching, show a flat cross-section of subscribed + directory results instead of the normal browse layout */}
