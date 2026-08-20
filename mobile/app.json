@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Linksdoor",
-    "slug": "linksdoor",
+    "name": "StepsDoor",
+    "slug": "stepsdoor",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "linksdoor",
+    "scheme": "stepsdoor",
     "userInterfaceStyle": "automatic",
     "android": {
       "adaptiveIcon": {
@@ -13,10 +13,10 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png"
       },
-      "package": "in.linksdoor.app"
+      "package": "in.stepsdoor.app"
     },
     "ios": {
-      "bundleIdentifier": "in.linksdoor.app"
+      "bundleIdentifier": "in.stepsdoor.app"
     },
     "web": {
       "output": "single",

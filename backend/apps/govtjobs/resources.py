@@ -1,3 +1,10 @@
+"""
+django-import-export resource definitions for the `govtjobs` app.
+
+Used by `admin.py` (via `ImportExportModelAdmin`) to let staff bulk
+import/export `GovtJob` rows as CSV/Excel from the Django admin — handy for
+seeding data or backfilling listings outside of the normal scraper pipeline.
+"""
 from import_export import resources
 
 from .models import GovtJob

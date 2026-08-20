@@ -1,5 +1,15 @@
+/**
+ * Footer.jsx
+ *
+ * Site-wide footer with the brand blurb and grouped link columns (Browse,
+ * Employers, Job Seekers) plus a copyright bar. Hidden on small screens
+ * (mobile uses MobileBottomNav instead). Rendered once inside PublicLayout,
+ * so it appears at the bottom of every public-facing page.
+ */
 import { Link } from 'react-router-dom'
 
+// Column definitions for the footer's link grid: each section has a heading
+// and a list of { to, label } route links rendered underneath it.
 const FOOTER_SECTIONS = [
   {
     heading: 'Browse',
@@ -36,6 +46,19 @@ const FOOTER_SECTIONS = [
   },
 ]
 
+/**
+ * Footer
+ *
+ * Global site footer: brand blurb on the left, three link columns
+ * (Browse / Employers / Job Seekers) generated from FOOTER_SECTIONS, and a
+ * bottom copyright bar with a dynamically computed year.
+ *
+ * Props: none.
+ *
+ * Rendered once by PublicLayout, so it appears on every public page. Hidden
+ * below the `md` breakpoint (`hidden md:block`) since mobile users get
+ * MobileBottomNav for navigation instead.
+ */
 export default function Footer() {
   return (
     <footer className="hidden md:block border-t bg-white">
@@ -45,13 +68,13 @@ export default function Footer() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
           {/* Brand */}
           <div className="col-span-2 sm:col-span-1">
-            <Link to="/" className="text-lg font-bold text-primary">Linksdoor</Link>
+            <Link to="/" className="text-lg font-bold text-primary">StepsDoor</Link>
             <p className="mt-2 text-xs text-muted-foreground leading-relaxed max-w-xs">
               India's all-in-one destination for private jobs, government tenders, sarkari naukri, freelance gigs, and shopping.
             </p>
           </div>
 
-          {/* Link columns */}
+          {/* Link columns — one column per FOOTER_SECTIONS entry, each with its own nested link list */}
           {FOOTER_SECTIONS.map(({ heading, links }) => (
             <div key={heading}>
               <p className="text-xs font-semibold text-foreground uppercase tracking-wider mb-3">{heading}</p>
@@ -68,9 +91,9 @@ export default function Footer() {
           ))}
         </div>
 
-        {/* Bottom bar */}
+        {/* Bottom bar — copyright year computed at render time from the current date */}
         <div className="mt-10 pt-6 border-t text-center text-xs text-muted-foreground">
-          <span>© {new Date().getFullYear()} Linksdoor. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} StepsDoor. All rights reserved.</span>
         </div>
 
       </div>

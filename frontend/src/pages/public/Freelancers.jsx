@@ -1,3 +1,14 @@
+/**
+ * Freelancers.jsx
+ *
+ * Public directory page mounted at `/freelancers` (see App.jsx). Static,
+ * curated catalogue of external freelance/gig platforms grouped by
+ * category (global, India-focused, developers, design, writing, etc.),
+ * each entry flagged for whether it supports India-friendly payouts.
+ * StepsDoor doesn't broker these gigs — every card is an outbound link to
+ * the platform's own site. Supports category filtering (sidebar/pills) and
+ * an India-pay/India-region quick filter.
+ */
 import { useState } from 'react'
 import { ExternalLink, Globe, MapPin, Code, Palette, PenLine, Zap, Wifi, Building2, TrendingUp, Mic, BookOpen, IndianRupee } from 'lucide-react'
 
@@ -6,6 +17,8 @@ import { ExternalLink, Globe, MapPin, Code, Palette, PenLine, Zap, Wifi, Buildin
 //               false = known restrictions or US/EU-only payout
 //               null = unverified — check platform before committing
 
+// Curated freelance/gig platforms grouped by category. Each group renders
+// as its own section (see PlatformGroup) with a sidebar/pill filter entry.
 const PLATFORM_GROUPS = [
   {
     id: 'global',
@@ -182,6 +195,7 @@ const PLATFORM_GROUPS = [
   },
 ]
 
+// Category colour -> Tailwind classes used across the badges, sidebar highlights, and pills
 const COLOR_MAP = {
   blue:   { bg: 'bg-blue-50',   text: 'text-blue-700',   icon: 'text-blue-500',   border: 'border-blue-100',   badge: 'bg-blue-100 text-blue-700' },
   orange: { bg: 'bg-orange-50', text: 'text-orange-700', icon: 'text-orange-500', border: 'border-orange-100', badge: 'bg-orange-100 text-orange-700' },
@@ -198,6 +212,7 @@ const COLOR_MAP = {
 
 const REGION_LABELS = { global: 'Global', india: 'India', europe: 'Europe' }
 
+// Card for one freelance platform — plain outbound link, with region badge and optional India-pay badge
 function PlatformCard({ platform, color }) {
   const c = COLOR_MAP[color]
   return (
@@ -233,6 +248,9 @@ function PlatformCard({ platform, color }) {
   )
 }
 
+// One category section: header (icon/label/count) + a grid of PlatformCards.
+// `filter` narrows the group's platforms to India-pay or India-region only;
+// the whole section is hidden if no platforms remain after filtering.
 function PlatformGroup({ group, filter }) {
   const c = COLOR_MAP[group.color]
   const Icon = group.icon
@@ -261,9 +279,16 @@ function PlatformGroup({ group, filter }) {
   )
 }
 
+/**
+ * Renders the freelancer platform directory: a payout-type filter pill row
+ * (All / India Pay / India-Focused), a sidebar (desktop) or horizontal
+ * strip (mobile) of category shortcuts, and the filtered platform groups.
+ * Category clicks scroll to that group's section rather than hiding others,
+ * except "All" which resets to the top.
+ */
 export default function Freelancers() {
-  const [filter, setFilter] = useState('all')
-  const [activeCategory, setActiveCategory] = useState('all')
+  const [filter, setFilter] = useState('all') // payout/region quick filter: 'all' | 'india_pay' | 'india_region'
+  const [activeCategory, setActiveCategory] = useState('all') // which category sidebar/pill is highlighted (drives scroll-to + which groups render)
 
   const allPlatforms = PLATFORM_GROUPS.flatMap(g => g.platforms)
   const total = allPlatforms.length
@@ -275,6 +300,8 @@ export default function Freelancers() {
     { id: 'india_region', label: 'India-Focused' },
   ]
 
+  // Groups to actually render: must match the active category (or 'all')
+  // AND still have at least one platform left after applying the payout/region filter
   const visibleGroups = PLATFORM_GROUPS.filter(group => {
     if (activeCategory !== 'all' && group.id !== activeCategory) return false
     const platforms = filter === 'india_pay'
@@ -285,6 +312,10 @@ export default function Freelancers() {
     return platforms.length > 0
   })
 
+  // Sidebar/pill category click handler — sets the active category and
+  // either scrolls smoothly to that category's section (after a short delay
+  // so the section has re-rendered/exists in the DOM) or, for "All", scrolls
+  // back to the top of the page.
   const handleCategoryClick = (id) => {
     setActiveCategory(id)
     if (id !== 'all') {
@@ -309,7 +340,7 @@ export default function Freelancers() {
         </p>
       </div>
 
-      {/* Filter pills */}
+      {/* Filter pills — switches the payout/region quick filter (All / India Pay / India-Focused) */}
       <div className="flex flex-wrap gap-2 mb-6">
         {FILTERS.map(f => (
           <button
@@ -420,6 +451,7 @@ export default function Freelancers() {
 
         {/* ── Main content ── */}
         <div className="flex-1 min-w-0 space-y-10">
+          {/* Empty state vs. the filtered/visible category groups */}
           {visibleGroups.length === 0 ? (
             <div className="py-20 text-center text-muted-foreground">
               No platforms match the current filter.
@@ -433,7 +465,7 @@ export default function Freelancers() {
           {/* Footer note */}
           <div className="border-t pt-6 space-y-2">
             <p className="text-xs text-muted-foreground text-center">
-              Linksdoor is not affiliated with any platforms listed above. Links open in a new tab.
+              StepsDoor is not affiliated with any platforms listed above. Links open in a new tab.
             </p>
             <p className="text-xs text-muted-foreground text-center">
               ⚠️ Freelance platforms shut down or change payout policies frequently.

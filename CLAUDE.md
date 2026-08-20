@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What is Linksdoor
+## What is StepsDoor
 
 A job board SaaS for the Indian market with three content types:
 1. **Private job listings** — companies pay a subscription to post; job seekers browse free and are redirected to the company's own careers page to apply
@@ -29,7 +29,7 @@ mobile/     ← Expo React Native app (job seekers only)
 
 ## Backend (Django)
 
-**Run from `backend/` directory.** Python is system Python (Python 3.13) — no venv activation needed.
+**Run from `backend/` directory.** A virtualenv exists at `backend/linksvenv/` — activate it before running Django commands (`source linksvenv/Scripts/activate` on Windows bash). Django 6.0.
 
 ```bash
 python manage.py runserver
@@ -46,7 +46,7 @@ Run scrapers manually:
 scrapy crawl mahatenders -s SCRAPY_SETTINGS_MODULE=scrapers.settings
 ```
 
-**Settings**: `config/settings/base.py` (common), `development.py`, `production.py`. Entry point: `DJANGO_SETTINGS_MODULE=config.settings.development`.
+**Settings**: `config/settings/base.py` (common), `development.py`, `production.py`. Entry point: `DJANGO_SETTINGS_MODULE=config.settings.development`. Copy `backend/.env.example` → `backend/.env` and `frontend/.env.example` → `frontend/.env` for local setup.
 
 **Apps** (`backend/apps/`):
 
@@ -63,10 +63,12 @@ scrapy crawl mahatenders -s SCRAPY_SETTINGS_MODULE=scrapers.settings
 | `notifications` | FCM token registration, email via SendGrid |
 | `tenders` | Govt tender listings, TenderAlert, ScraperLog |
 | `govtjobs` | Govt job listings, GovtJobAlert |
+| `freelancers` | Freelancer profiles (early-stage) |
+| `stores` | Company storefront/catalogue listings |
 
 **Shared utilities** (`backend/core/`): `permissions.py` (IsCompanyUser, IsJobSeeker, IsOwner), `pagination.py` (20/page), `exceptions.py` (custom JSON error handler).
 
-**Scraper** (`backend/scrapers/`): Scrapy project. `pipelines.py` uses `Tender.objects.update_or_create` so re-runs are idempotent. `scrapers/settings.py` bootstraps Django before any import. Add new portal spiders to `scrapers/spiders/` and register in `apps/tenders/tasks.py::PORTAL_SPIDER_MAP`.
+**Scraper** (`backend/scrapers/`): Scrapy project. `pipelines.py` uses `Tender.objects.update_or_create` / `GovtJob.objects.update_or_create` so re-runs are idempotent (`TenderPipeline` and `GovtJobPipeline` each key off a distinguishing item field — `tender_id` vs `job_id`). `scrapers/settings.py` bootstraps Django before any import. Portals are a DB registry (`ScraperSource` model), not hardcoded — see Data Pipeline section below.
 
 **Key model notes**:
 - `AUTH_USER_MODEL = 'authentication.User'`
@@ -98,7 +100,13 @@ Dev server proxies `/api/*` to `http://localhost:8000` (configured in `vite.conf
 
 **Services** (`src/services/`): one file per domain — `api.js` is the shared Axios instance with JWT interceptor and auto-refresh on 401. All other service files import from `api.js`.
 
-**State** (`src/store/`): Zustand. `authStore.js` persists to localStorage. `jobStore.js` holds filter state.
+**State** (`src/store/`): Zustand. `authStore.js` persists to localStorage. `jobStore.js` holds filter state. `subscriptionStore.js` caches the active plan.
+
+**Forms**: React Hook Form + Zod for validation across all forms.
+
+**Rich text**: TipTap editor used for job description input in company pages.
+
+**Charts**: Recharts used in the company analytics dashboard.
 
 **Styling**: Tailwind CSS v3 with shadcn/ui CSS variable colour system. `src/utils/cn.js` exports the `cn()` helper (clsx + tailwind-merge).
 
@@ -112,6 +120,7 @@ Dev server proxies `/api/*` to `http://localhost:8000` (configured in `vite.conf
 npm start               # Expo dev server (scan QR with Expo Go)
 npm start -- --tunnel   # if phone and PC are on different networks
 npm run android         # requires Android Studio + emulator
+npm run lint             # expo lint
 eas build --platform android  # cloud APK build (no Android Studio needed)
 ```
 
@@ -142,21 +151,41 @@ eas build --platform android  # cloud APK build (no Android Studio needed)
 
 ## Data Pipeline (Tenders & Govt Jobs)
 
+Portals are registered in the DB via the `ScraperSource` model (`apps/tenders/models.py`), not hardcoded — admin only supplies a URL and `source_type` (`tender` / `govt_job`); `source_portal`, `name`, and `spider_name` are auto-derived on save (`spider_name` defaults to `generic_tender` or `generic_govtjob`).
+
 ```
 Celery Beat (every 6 hours)
   → scrape_all_portals task
-      → Scrapy spider per portal
-      → TenderPipeline.process_item() → Tender.update_or_create()
+      → queries active ScraperSource rows, calls scrape_portal.delay(portal_name) per portal
+  → scrape_portal(portal_name) task
+      → looks up ScraperSource, runs its spider (start_url + source_portal passed in)
+      → TenderPipeline / GovtJobPipeline .process_item() → update_or_create() on Tender/GovtJob
       → ScraperLog updated
   → match_tender_alerts task
       → new tenders (last 24h) matched against TenderAlert records
-      → notification dispatch (TODO: Week 10)
+      → notification dispatch (FCM + email — notifications app, TODO as of now)
 ```
 
+Most Indian govt portals run the same NIC eProcurement software, so `generic_tender_spider.py` and `generic_govtjob_spider.py` (`scrapers/spiders/`) handle them via shared CSS selectors — adding a portal is usually just a new `ScraperSource` row via Django admin, no code. `mahatenders_spider.py` is an example of a portal-specific spider for one that needs custom handling.
+
 To add a new portal:
-1. Create `backend/scrapers/spiders/<name>_spider.py`
-2. Add entry to `PORTAL_SPIDER_MAP` in `backend/apps/tenders/tasks.py`
-3. Schedule via Django admin → Periodic Tasks
+1. If it runs standard NIC software, add a `ScraperSource` row via Django admin (`/admin/tenders/scrapersource/`) — set `url` and `source_type`, leave the rest blank.
+2. If it needs custom parsing, create `backend/scrapers/spiders/<name>_spider.py` and set `spider_name` on the `ScraperSource` row to match.
+3. Schedule `scrape_all_portals` / `match_tender_alerts` via Django admin → Periodic Tasks (django-celery-beat) if not already running.
+
+---
+
+## Code Comments (required convention)
+
+This codebase is documented with thorough, explanatory comments so it can be understood by re-reading it cold, without needing to reconstruct intent from git history or Slack threads. **Every new or changed class, function/method, and non-obvious property/field must be commented — this is not optional.**
+
+- **Backend (Python/Django)**: every module gets a top-of-file docstring describing its role; every class (models, serializers, views, permissions, admin, Celery tasks, spiders, pipelines) gets a docstring covering what it represents and when it's used; every model/serializer field gets an inline comment explaining what it stores; every method/function gets a docstring covering parameters, return value, and the use-case that calls it.
+- **Frontend/mobile (JS/JSX/TS/TSX)**: every file gets a top-of-file comment describing its role; every component gets a JSDoc block above it describing what it renders, its props, and which parent/route uses it; every hook, handler, and exported function gets a comment on purpose; every non-obvious prop, store field, or constant gets a short inline comment.
+- Inline `//`/`#` comments belong on any branch, loop, or transformation whose *why* isn't obvious from naming alone.
+- Comments must never restate what the code already says (e.g. don't write `# increment counter` above `count += 1`) — they explain intent, constraints, and use-cases. Wherever the identifier names already make that clear, prefer a short one-liner over a paragraph.
+- Comments-only changes must not alter behavior, logic, or formatting.
+
+When making future changes to this repo — new files, new functions, edits to existing ones — apply this same standard: add or update the relevant docstrings/comments as part of the change, don't leave new code uncommented.
 
 ---
 

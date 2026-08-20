@@ -1,3 +1,16 @@
+/**
+ * Companies.jsx
+ *
+ * Public company directory page mounted at `/companies` (see App.jsx). Has
+ * two distinct sections stacked vertically:
+ *   1. "Companies Hiring on StepsDoor" — live, paginated-free list of
+ *      companies with an active subscription (fetched via companyService),
+ *      each linking to its branded /careers/:slug page.
+ *   2. A large static "India Company Career Directory" (COMPANY_DIRECTORY
+ *      below) of major Indian/MNC employers with direct outbound links to
+ *      their own careers portals — StepsDoor doesn't host these listings,
+ *      it's just a curated jump-off directory, filterable by sector.
+ */
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Briefcase, Building2, ExternalLink, Search } from 'lucide-react'
@@ -6,8 +19,12 @@ import { Spinner } from '@/components/ui/Spinner'
 import { Input } from '@/components/ui/Input'
 
 // ─── Static company career directory ──────────────────────────────────────────
-
-const COMPANY_DIRECTORY = [
+// Curated list of major Indian/MNC employers with a direct link to each
+// company's own careers page. Not fetched from the API — these are
+// companies StepsDoor is not affiliated with, shown purely for discovery.
+// Each entry: { name, url (external careers link), desc, sector (used for
+// the sidebar filter and colour-coded badges below) }.
+export const COMPANY_DIRECTORY = [
   // IT & Software
   { name: 'TCS',               url: 'https://www.tcs.com/careers',                    desc: 'Tata Consultancy Services',           sector: 'IT & Software' },
   { name: 'Infosys',           url: 'https://www.infosys.com/careers',                desc: 'Infosys careers portal',              sector: 'IT & Software' },
@@ -480,6 +497,7 @@ const COMPANY_DIRECTORY = [
   { name: 'Amber Enterprises', url: 'https://www.ambergroupindia.com/careers',        desc: 'Amber Enterprises electronics mfg',  sector: 'Agriculture & Textiles' },
 ]
 
+// Sector -> Tailwind badge colour classes for COMPANY_DIRECTORY cards
 const SECTOR_COLORS = {
   'IT & Software':             'bg-blue-50 text-blue-700',
   'Tech / MNCs':               'bg-indigo-50 text-indigo-700',
@@ -512,7 +530,7 @@ const SECTOR_COLORS = {
   'Agriculture & Textiles':    'bg-lime-50 text-lime-700',
 }
 
-// Ordered sector list (matches COMPANY_DIRECTORY order of appearance)
+// Ordered sector list (matches COMPANY_DIRECTORY order of appearance) — drives the sidebar/mobile filter pill order
 const SECTORS_ORDERED = [
   'IT & Software',
   'Tech / MNCs',
@@ -545,14 +563,16 @@ const SECTORS_ORDERED = [
   'Agriculture & Textiles',
 ]
 
-// Precomputed count per sector
+// Precomputed count per sector, shown next to each sidebar filter entry
 const SECTOR_COUNTS = SECTORS_ORDERED.reduce((acc, s) => {
   acc[s] = COMPANY_DIRECTORY.filter(c => c.sector === s).length
   return acc
 }, {})
 
-// ─── Linksdoor subscriber company card ────────────────────────────────────────
+// ─── StepsDoor subscriber company card ────────────────────────────────────────
 
+// Card for a company that has an active StepsDoor subscription; clicking
+// navigates to that company's branded /careers/:slug page (see onClick prop).
 function CompanyCard({ company, onClick }) {
   return (
     <button
@@ -582,6 +602,8 @@ function CompanyCard({ company, onClick }) {
 
 // ─── Career directory link card ────────────────────────────────────────────────
 
+// Card for one COMPANY_DIRECTORY entry — a plain outbound link to that
+// company's own careers portal (opens in a new tab), with a sector badge.
 function CareerLinkCard({ name, url, desc, sector }) {
   return (
     <a
@@ -608,22 +630,32 @@ function CareerLinkCard({ name, url, desc, sector }) {
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
+/**
+ * Renders the two-part Companies page: a top section listing StepsDoor
+ * subscriber companies (with search), and a bottom section with a
+ * sector-filterable, searchable static career directory of major Indian
+ * companies. Top-section search results also surface matches from the
+ * static directory so a visitor searching "Google" finds it even though
+ * Google isn't a StepsDoor subscriber.
+ */
 export default function Companies() {
   const navigate = useNavigate()
-  const [companies, setCompanies] = useState([])
+  const [companies, setCompanies] = useState([]) // StepsDoor subscriber companies fetched from the API
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [dirSearch, setDirSearch] = useState('')
-  const [sectorFilter, setSectorFilter] = useState('all')
-  const linksdoorRef = useRef(null)
-  const directoryRef = useRef(null)
+  const [search, setSearch] = useState('')       // top-section search (subscriber companies + directory fallback)
+  const [dirSearch, setDirSearch] = useState('')  // bottom-section directory-only search
+  const [sectorFilter, setSectorFilter] = useState('all') // active sector filter for the directory sidebar
+  const stepsdoorRef = useRef(null)  // reserved anchor ref for the subscriber section (not currently scrolled to)
+  const directoryRef = useRef(null)  // reserved anchor ref for the directory section (not currently scrolled to)
 
+  // Fetch the list of companies actively subscribed on StepsDoor once on mount.
   useEffect(() => {
     companyService.list()
       .then(({ data }) => setCompanies(data.results ?? data))
       .finally(() => setLoading(false))
   }, [])
 
+  // Subscriber companies matching the top-section search box (name or description)
   const filtered = search.trim()
     ? companies.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -631,6 +663,16 @@ export default function Companies() {
       )
     : companies
 
+  // Companies not hiring on StepsDoor yet, but present in the static career directory
+  const filteredDirFromTopSearch = search.trim()
+    ? COMPANY_DIRECTORY.filter(c =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.desc.toLowerCase().includes(search.toLowerCase()) ||
+        c.sector.toLowerCase().includes(search.toLowerCase())
+      )
+    : []
+
+  // Directory entries matching both the active sector filter and the bottom-section directory search box
   const filteredDir = COMPANY_DIRECTORY.filter(c => {
     const matchSector = sectorFilter === 'all' || c.sector === sectorFilter
     const matchSearch = !dirSearch.trim() ||
@@ -648,12 +690,12 @@ export default function Companies() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
 
-      {/* ── Top section: Companies Hiring on Linksdoor (full width) ── */}
-      <section ref={linksdoorRef}>
+      {/* ── Top section: Companies Hiring on StepsDoor (full width) ── */}
+      <section ref={stepsdoorRef}>
         <div className="mb-6">
-          <h1 className="text-2xl font-bold">Companies Hiring on Linksdoor</h1>
+          <h1 className="text-2xl font-bold">Companies Hiring on StepsDoor</h1>
           <p className="text-muted-foreground mt-1">
-            Browse companies actively hiring on Linksdoor with open positions.
+            Browse companies actively hiring on StepsDoor with open positions.
             {companies.length > 0 && (
               <span className="ml-2 font-medium text-foreground">
                 {companies.length} compan{companies.length !== 1 ? 'ies' : 'y'}
@@ -671,12 +713,17 @@ export default function Companies() {
           />
         </div>
 
+        {/* Loading / empty / results states for subscriber companies. The
+            empty state is itself conditional: if the directory fallback
+            below has results, we skip the "no companies" message entirely. */}
         {loading ? (
           <div className="flex justify-center py-16"><Spinner /></div>
         ) : filtered.length === 0 ? (
-          <div className="py-10 text-center text-muted-foreground">
-            {search ? 'No companies match your search.' : 'No companies are currently hiring on Linksdoor.'}
-          </div>
+          filteredDirFromTopSearch.length === 0 && (
+            <div className="py-10 text-center text-muted-foreground">
+              {search ? 'No companies match your search.' : 'No companies are currently hiring on StepsDoor.'}
+            </div>
+          )
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map(company => (
@@ -686,6 +733,20 @@ export default function Companies() {
                 onClick={() => navigate(`/careers/${company.slug}`)}
               />
             ))}
+          </div>
+        )}
+
+        {/* Directory fallback matches for the top-section search — shown alongside/instead of subscriber results */}
+        {!loading && search.trim() && filteredDirFromTopSearch.length > 0 && (
+          <div className={filtered.length > 0 ? 'mt-8' : ''}>
+            <p className="text-sm font-medium text-muted-foreground mb-3">
+              Also found in our career directory ({filteredDirFromTopSearch.length})
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {filteredDirFromTopSearch.map(c => (
+                <CareerLinkCard key={c.name + c.sector} name={c.name} url={c.url} desc={c.desc} sector={c.sector} />
+              ))}
+            </div>
           </div>
         )}
       </section>
@@ -816,7 +877,7 @@ export default function Companies() {
             )}
 
             <p className="mt-10 text-xs text-muted-foreground text-center border-t pt-6">
-              Career links go directly to official company portals. Linksdoor is not affiliated with any listed company.
+              Career links go directly to official company portals. StepsDoor is not affiliated with any listed company.
               Always verify job openings on the official careers page before applying.
             </p>
           </div>

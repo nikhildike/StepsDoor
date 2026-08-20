@@ -1,3 +1,10 @@
+/**
+ * ProfileScreen.tsx
+ *
+ * Account screen for the "Profile" bottom tab: shows the signed-in user's
+ * basic info and a sign-out action, or a guest prompt when not
+ * authenticated. Root screen of that tab (no further stack navigation).
+ */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -7,12 +14,22 @@ import { Colors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 
+/**
+ * Renders the current user's avatar (initial), name, email, and account
+ * type with a sign-out button; falls back to a "browsing as a guest"
+ * message when no user is signed in. Reads no route params. Use case:
+ * account hub for the Profile tab, and the primary way for a job seeker to
+ * sign out.
+ */
 export function ProfileScreen() {
+  // Auth state (user, isAuthenticated) and the signOut action, sourced from
+  // the persisted auth store via useAuth().
   const { user, signOut, isAuthenticated } = useAuth();
 
   return (
     <ScreenWrapper>
       <View style={styles.container}>
+        {/* Signed-in view vs. guest prompt, based on auth state */}
         {isAuthenticated && user ? (
           <>
             <View style={styles.avatar}>
@@ -31,6 +48,9 @@ export function ProfileScreen() {
             </View>
 
             <View style={styles.signOutButton}>
+              {/* Sign-out action: clears the persisted token/user via
+                  useAuth().signOut, which triggers RootNavigator to switch
+                  back to AuthNavigator */}
               <Button
                 title="Sign Out"
                 variant="outline"

@@ -19,8 +19,16 @@ logger = logging.getLogger(__name__)
 def scrape_portal(self, portal_name: str):
     """
     Run the Scrapy spider for a single portal.
-    Looks up spider_name and start URL from ScraperSource in the DB.
-    Called by scrape_all_portals or triggered manually from Django admin.
+
+    Looks up `spider_name` and start URL from the matching `ScraperSource` row in the DB
+    (keyed by `source_portal`), then runs that spider synchronously inside the Celery worker
+    process. The spider's `TenderPipeline.process_item()` handles the actual
+    `Tender.objects.update_or_create()` dedup/write as items are yielded.
+
+    Called either by `scrape_all_portals` (Celery Beat's every-6-hours schedule, one call per
+    active tender `ScraperSource`) or ad hoc via the "Scrape selected sources now" admin
+    action (`ScraperSourceAdmin.scrape_now`). Retries up to 3 times (5 min backoff) on any
+    exception, e.g. transient network/portal errors.
     """
     from scrapy.crawler import CrawlerProcess
     from scrapy.utils.project import get_project_settings
@@ -29,10 +37,11 @@ def scrape_portal(self, portal_name: str):
     try:
         source = ScraperSource.objects.get(source_portal=portal_name, is_active=True)
     except ScraperSource.DoesNotExist:
+        # Portal may have been deactivated/removed since it was queued — skip rather than error.
         logger.warning(f"No active ScraperSource found for portal: {portal_name}")
         return
 
-    log = ScraperLog.objects.create(portal=portal_name)
+    log = ScraperLog.objects.create(portal=portal_name)  # starts life as Status.RUNNING (model default)
     try:
         import os
         os.environ.setdefault('SCRAPY_SETTINGS_MODULE', 'scrapers.settings')
@@ -57,15 +66,26 @@ def scrape_portal(self, portal_name: str):
         logger.exception(f"Scraper failed for {portal_name}: {exc}")
         raise self.retry(exc=exc)
     finally:
+        # Always stamp finish time and persist status, whether the run succeeded or failed
+        # (the retry above re-raises, so this finally still runs before the task re-queues).
         log.finished_at = timezone.now()
         log.save()
 
 
 @shared_task
 def scrape_all_portals():
-    """Dispatch scrape tasks for every active tender source in the ScraperSource registry."""
+    """
+    Dispatch scrape tasks for every active tender source in the ScraperSource registry.
+
+    This is the entry point Celery Beat calls on its recommended every-6-hours schedule
+    (configured via django-celery-beat's PeriodicTask admin, not in code). It only fans out
+    one `scrape_portal.delay()` call per portal — the actual scraping happens asynchronously
+    in those child tasks so a slow/broken portal can't block the others.
+    """
     from apps.tenders.models import ScraperSource
 
+    # Only TYPE_TENDER sources here — govt job portals have their own equivalent task
+    # (apps.govtjobs.tasks.scrape_all_govtjob_portals) filtering TYPE_GOVT_JOB.
     sources = ScraperSource.objects.filter(
         source_type=ScraperSource.TYPE_TENDER, is_active=True
     ).values_list('source_portal', flat=True)
@@ -81,15 +101,22 @@ def match_tender_alerts():
     """
     Match tenders published in the last 24 hours against active TenderAlerts.
     Queues push/email notifications for matching users.
+
+    Intended to run on Celery Beat's every-6-hours schedule, right after
+    `scrape_all_portals`, so newly scraped tenders get matched against alerts promptly.
+    Can also be triggered manually (e.g. from the Django shell) for testing.
     """
     from datetime import timedelta
     from django.db.models import Q
     from apps.tenders.models import Tender, TenderAlert
 
+    # 24h window: matches the every-6-hours Beat cadence with margin, so a tender scraped in
+    # any of the last few runs still gets picked up even if match_tender_alerts is delayed.
     since = timezone.now() - timedelta(hours=24)
     new_tenders = Tender.objects.filter(created_at__gte=since, is_active=True)
 
     if not new_tenders.exists():
+        # Nothing new — skip the (potentially large) alert loop entirely.
         return
 
     alerts = TenderAlert.objects.filter(is_active=True).select_related('user')
@@ -106,6 +133,7 @@ def match_tender_alerts():
         if alert.min_value:
             filters &= Q(estimated_value__gte=alert.min_value)
 
+        # An alert with no filters set at all matches every new tender (Q() is falsy/empty).
         matching = new_tenders.filter(filters) if filters else new_tenders
         count = matching.count()
 

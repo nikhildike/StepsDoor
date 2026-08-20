@@ -1,3 +1,12 @@
+/**
+ * RegisterScreen.tsx
+ *
+ * Job-seeker sign-up screen: username/email/password form. Belongs to
+ * `AuthNavigator`'s stack (Login → Register), rendered by `RootNavigator`
+ * while there is no stored auth token. Submitting successfully registers and
+ * logs the user in via `useAuth().register`, letting `RootNavigator` switch
+ * to `AppNavigator`.
+ */
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
@@ -11,11 +20,22 @@ import { ScreenWrapper } from '@/components/common/ScreenWrapper';
 
 interface FormData { username: string; email: string; password: string; }
 
+/**
+ * Renders the account-creation form (username, email, password) and a link
+ * back to `LoginScreen`. Reads no route params; `navigation` is used only to
+ * navigate to Login. Use case: lets a new job seeker create an account so
+ * they can save jobs and manage alerts.
+ */
 export function RegisterScreen({ navigation }: { navigation: any }) {
+  // Exposes the register() action, which calls authService.register and
+  // persists the resulting token/user to the auth store on success.
   const { register } = useAuth();
   const [error, setError] = useState('');
   const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>();
 
+  // Form submit handler, fired when the user taps "Create account" and
+  // validation passes. Registers as a job seeker (is_job_seeker: true) and
+  // surfaces the backend's error detail, or a fallback message, on failure.
   const onSubmit = async (data: FormData) => {
     try {
       setError('');
@@ -30,6 +50,7 @@ export function RegisterScreen({ navigation }: { navigation: any }) {
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Create account</Text>
         <Text style={styles.subtitle}>Find jobs and tenders in India</Text>
+        {/* Error banner: only shown after a failed submit attempt */}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <View style={{ gap: Spacing[4] }}>
           <Controller control={control} name="username" rules={{ required: 'Username is required' }}
@@ -40,6 +61,7 @@ export function RegisterScreen({ navigation }: { navigation: any }) {
             render={({ field }) => <Input label="Password" placeholder="••••••••" secureTextEntry error={errors.password?.message} onChangeText={field.onChange} value={field.value} />} />
           <Button title={isSubmitting ? 'Creating account...' : 'Create account'} onPress={handleSubmit(onSubmit)} loading={isSubmitting} />
         </View>
+        {/* Navigates to LoginScreen within the same AuthNavigator stack */}
         <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.link}>
           <Text style={styles.linkText}>Already have an account? <Text style={styles.linkBold}>Sign in</Text></Text>
         </TouchableOpacity>

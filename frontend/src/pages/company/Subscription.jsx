@@ -1,15 +1,35 @@
+/**
+ * Company Subscription page.
+ *
+ * Route: `/dashboard/subscription` (nested under the company dashboard layout).
+ * Also re-exported as-is by `pages/store/StoreSubscription.jsx` for the store
+ * owner subscription route, since both flows share identical plan/billing logic.
+ * Access: company accounts (and, via re-export, store-owner accounts) —
+ * mounted behind `ProtectedRoute requireCompany` (or the store equivalent).
+ *
+ * Shows the current subscription status (active plan + expiry, or "no active
+ * subscription"), and a grid of available plans the user can subscribe to.
+ * Actual payment collection via Razorpay is not yet implemented — selecting a
+ * plan just shows a placeholder alert.
+ */
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { CheckCircle, CreditCard, Calendar, Briefcase, Zap } from 'lucide-react'
 import { subscriptionService } from '@/services/subscriptionService'
 import { Spinner } from '@/components/ui/Spinner'
 
+// Feature bullet lists shown per plan tier, keyed by lowercased plan name.
+// Falls back to featuresForPlan()'s index-based lookup when a plan's name
+// doesn't match one of these known tier keys.
 const TIER_FEATURES = {
   starter:    ['Click analytics per job', 'Branded career page', 'Email support'],
   growth:     ['Click analytics per job', 'Branded career page', 'Featured listings', 'Priority support'],
   enterprise: ['Click analytics per job', 'Branded career page', 'Featured listings', 'Dedicated account manager', 'Custom branding'],
 }
 
+// Resolves the feature bullet list for a plan card: matches by plan name first
+// (e.g. "Growth" -> TIER_FEATURES.growth), otherwise falls back to picking a
+// tier by the plan's position in the list (clamped to the available tier keys).
 function featuresForPlan(plan, index) {
   const key = plan.name.toLowerCase()
   if (TIER_FEATURES[key]) return TIER_FEATURES[key]
@@ -17,30 +37,45 @@ function featuresForPlan(plan, index) {
   return TIER_FEATURES[keys[Math.min(index, keys.length - 1)]]
 }
 
+// Formats a numeric price as Indian Rupees with no decimal places (e.g. ₹1,999).
 function formatPrice(price) {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency', currency: 'INR', maximumFractionDigits: 0,
   }).format(price)
 }
 
+// Formats a date string/ISO value as "18 Aug 2026"-style Indian locale date, or an em dash if missing.
 function formatDate(d) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+// Computes the number of whole days remaining until endDate (clamped to 0), or null if no end date.
 function daysLeft(endDate) {
   if (!endDate) return null
   const diff = new Date(endDate) - Date.now()
   return Math.max(0, Math.ceil(diff / 86400000))
 }
 
+/**
+ * Renders subscription status (active plan/expiry or "no active subscription")
+ * and a grid of subscribable plans. Handles being deep-linked from the Pricing
+ * page with a pre-selected plan by auto-scrolling to the plans section.
+ */
 export default function Subscription() {
   const location = useLocation()
+  // Available subscription plans fetched from the backend.
   const [plans, setPlans] = useState([])
+  // Current subscription status: { active, subscription? }.
   const [current, setCurrent] = useState(null)   // { active, subscription? }
+  // True while the initial plans + current-subscription fetch is in flight.
   const [loading, setLoading] = useState(true)
+  // id of the plan currently being "subscribed" (used to show a per-card processing state).
   const [selecting, setSelecting] = useState(null) // plan id being "subscribed"
 
+  // Fetches the list of available plans and the user's current subscription status in parallel.
+  // GET /subscriptions/plans/ and GET /subscriptions/current/ (subscriptions app).
+  // Falls back to `{ active: false }` if the current-subscription call fails (e.g. no subscription yet).
   useEffect(() => {
     Promise.all([
       subscriptionService.plans(),
@@ -60,6 +95,9 @@ export default function Subscription() {
     }
   }, [location.state, loading])
 
+  // Handles clicking "Subscribe" on a plan card. Fires when the user picks a plan to subscribe to.
+  // NOTE: this is a placeholder — actual Razorpay checkout is not yet wired up here; it just
+  // shows an alert instructing the user to contact support instead of launching real payment.
   const handleSelectPlan = async (plan) => {
     // Razorpay integration placeholder
     setSelecting(plan.id)
@@ -67,6 +105,7 @@ export default function Subscription() {
     setSelecting(null)
   }
 
+  // Loading state: show a centered spinner until plans + subscription status have loaded.
   if (loading) return <div className="flex justify-center py-24"><Spinner /></div>
 
   const activeSub = current?.active ? current.subscription : null
@@ -79,7 +118,7 @@ export default function Subscription() {
         <p className="text-muted-foreground mt-1">Manage your plan and billing.</p>
       </div>
 
-      {/* Current plan status */}
+      {/* Current plan status: green banner with expiry/start details when subscribed, amber prompt otherwise. */}
       {activeSub ? (
         <div className="bg-green-50 border border-green-200 rounded-xl p-5 flex items-start gap-4">
           <Zap className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
@@ -108,15 +147,20 @@ export default function Subscription() {
         </div>
       )}
 
-      {/* Plan cards */}
+      {/* Plan cards: only rendered once at least one plan has been fetched. */}
       {plans.length > 0 && (
         <div id="plans-section">
           <h2 className="text-lg font-semibold mb-4">{activeSub ? 'Change Plan' : 'Choose a Plan'}</h2>
+          {/* Grid column count adapts to how many plans exist (1/2/3+ columns). */}
           <div className={`grid gap-5 ${plans.length === 1 ? '' : plans.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'}`}>
+            {/* Renders one pricing card per plan. */}
             {plans.map((plan, i) => {
+              // Whether this card represents the user's currently active plan.
               const isCurrentPlan = activeSub?.plan === plan.id
+              // Highlights the middle plan (or the 2nd of 3) as "Most Popular" when there's more than one plan.
               const isPopular = i === (plans.length === 3 ? 1 : Math.floor(plans.length / 2)) && plans.length > 1
               const features = featuresForPlan(plan, i)
+              // Describes the plan's active job-posting cap; treats 999+ as "unlimited".
               const jobFeature = plan.job_limit >= 999
                 ? 'Unlimited active job posts'
                 : `Up to ${plan.job_limit} active job post${plan.job_limit !== 1 ? 's' : ''}`
@@ -128,6 +172,7 @@ export default function Subscription() {
                     isCurrentPlan ? 'border-green-500 ring-1 ring-green-500' : isPopular ? 'border-primary shadow-md' : 'border-border'
                   }`}
                 >
+                  {/* "Current Plan" ribbon takes priority over "Most Popular" when both would apply. */}
                   {isCurrentPlan && (
                     <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
                       Current Plan
@@ -152,6 +197,7 @@ export default function Subscription() {
                       <CheckCircle className="h-4 w-4 text-primary shrink-0" />
                       {jobFeature}
                     </li>
+                    {/* Renders each feature bullet resolved by featuresForPlan(). */}
                     {features.map(f => (
                       <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
                         <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
@@ -160,6 +206,8 @@ export default function Subscription() {
                     ))}
                   </ul>
 
+                  {/* Subscribe button: disabled if this is already the active plan or a checkout is in progress;
+                      styling and label vary by current/popular/default state. Triggers handleSelectPlan (Razorpay placeholder). */}
                   <button
                     onClick={() => handleSelectPlan(plan)}
                     disabled={isCurrentPlan || selecting === plan.id}
@@ -183,6 +231,7 @@ export default function Subscription() {
         </div>
       )}
 
+      {/* Empty state: backend returned no plans at all. */}
       {plans.length === 0 && (
         <p className="text-muted-foreground text-sm">No plans are available right now. Contact support.</p>
       )}

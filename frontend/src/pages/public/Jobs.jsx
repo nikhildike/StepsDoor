@@ -1,3 +1,12 @@
+/**
+ * Jobs.jsx
+ *
+ * Public job listing/browse page mounted at `/jobs` (see App.jsx). Displays
+ * a paginated, filterable grid of private (company-posted) job listings.
+ * All data fetching, filter state, and pagination live in the `useJobs`
+ * hook; this component is mostly presentational plumbing between that hook
+ * and the `JobFilter`/`JobCard` components.
+ */
 import { useNavigate } from 'react-router-dom'
 import { useJobs } from '@/hooks/useJobs'
 import { useSavedJobs } from '@/hooks/useSavedJobs'
@@ -8,10 +17,20 @@ import { Spinner } from '@/components/ui/Spinner'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 20 // must match the backend's page size for the Jobs list endpoint, used only to compute totalPages
 
+/**
+ * Renders the job search/browse experience: filter bar, results grid (with
+ * loading/empty states), pagination controls, and a save/sign-in prompt.
+ * Used by anonymous and signed-in visitors alike; save-job actions are
+ * gated to signed-in job seekers.
+ */
 export default function Jobs() {
+  // useJobs owns query-param-driven filter state, fetches the matching page
+  // of jobs from the API, and exposes setters to change filters/page.
   const { jobs, total, loading, filters, setFilters, setPage } = useJobs()
+  // Shared saved-jobs hook: tracks which jobs are saved, exposes a toggle,
+  // whether the current user is a job seeker, and per-job pending state.
   const { isSaved, toggleSave, isSeeker, pending } = useSavedJobs()
   const { token } = useAuthStore()
   const navigate = useNavigate()
@@ -19,6 +38,8 @@ export default function Jobs() {
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const currentPage = filters.page ?? 1
 
+  // Save/unsave handler passed down to each JobCard. Anonymous visitors are
+  // redirected to sign in; non-seeker accounts (e.g. companies) are no-ops.
   const handleToggleSave = (jobId) => {
     if (!token) {
       navigate('/login')
@@ -40,12 +61,14 @@ export default function Jobs() {
       <JobFilter filters={filters} onChange={setFilters} />
 
       <div className="mt-6">
+        {/* Loading / empty / results states, in that priority order */}
         {loading ? (
           <div className="flex justify-center py-16"><Spinner /></div>
         ) : jobs.length === 0 ? (
           <EmptyState title="No jobs found" description="Try adjusting your filters." />
         ) : (
           <>
+            {/* Job results grid */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {jobs.map(job => (
                 <JobCard

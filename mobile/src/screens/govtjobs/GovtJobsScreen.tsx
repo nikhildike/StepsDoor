@@ -1,3 +1,10 @@
+/**
+ * GovtJobsScreen.tsx
+ *
+ * List screen for the "Govt Jobs" bottom tab: a searchable feed of
+ * government job listings. Root screen of that tab's stack navigator;
+ * navigates to `GovtJobDetailScreen` on card tap.
+ */
 import React, { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View, Text, TextInput, TouchableOpacity } from 'react-native';
 import { govtJobService } from '@/services/govtJobService';
@@ -20,11 +27,16 @@ interface GovtJob {
   qualification?: string;
 }
 
+// Card renderer used as FlatList's renderItem below. Formats the deadline
+// and flags jobs expiring within 3 days so the list can highlight urgency.
 function GovtJobCard({ job, onPress }: { job: GovtJob; onPress: () => void }) {
+  // Human-readable "last date to apply", or null if the job has none
   const lastDate = job.last_date
     ? new Date(job.last_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : null;
 
+  // True when the deadline is less than 3 days away, used to style the
+  // last-date text as urgent (red) in the card footer
   const isExpiringSoon = job.last_date
     ? (new Date(job.last_date).getTime() - Date.now()) < 3 * 86400000
     : false;
@@ -49,11 +61,21 @@ function GovtJobCard({ job, onPress }: { job: GovtJob; onPress: () => void }) {
   );
 }
 
+/**
+ * Renders a searchable list of government job postings. Reads no route
+ * params; `navigation` is used to push `GovtJobDetailScreen` with the
+ * tapped job's id. Use case: primary browse/search entry point for the
+ * "Govt Jobs" tab, letting a job seeker filter by keyword and drill into a
+ * listing's full details.
+ */
 export function GovtJobsScreen({ navigation }: { navigation: any }) {
   const [jobs, setJobs] = useState<GovtJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
+  // Fetches govt jobs from GET /govtjobs/?search=... whenever the search
+  // term changes (including the initial empty-string load). Falls back to
+  // an empty list on error so the EmptyState renders instead of crashing.
   useEffect(() => {
     setLoading(true);
     govtJobService
@@ -74,19 +96,25 @@ export function GovtJobsScreen({ navigation }: { navigation: any }) {
           onChangeText={setSearch}
         />
       </View>
+      {/* Loading state: spinner while the initial/search fetch is in flight */}
       {loading ? (
         <Spinner />
       ) : (
         <FlatList
           data={jobs}
+          // Stable string key per job id, required by FlatList for
+          // efficient re-renders/recycling
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <GovtJobCard
               job={item}
+              // List item press: navigate to GovtJobDetailScreen with the
+              // tapped job's id as a route param
               onPress={() => navigation.navigate('GovtJobDetail', { jobId: item.id })}
             />
           )}
+          // Empty state shown when the search/fetch returns no results
           ListEmptyComponent={
             <EmptyState
               title="No government jobs found"

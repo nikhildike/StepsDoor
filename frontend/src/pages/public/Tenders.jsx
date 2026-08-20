@@ -1,7 +1,22 @@
+/**
+ * Tenders.jsx
+ *
+ * Public directory page mounted at `/tenders` (see App.jsx). NOTE: distinct
+ * from the scraped Tender listings shown via TenderDetail.jsx — this page
+ * is a static, curated directory of official government e-procurement
+ * portal links, split into Central & PSU portals (CENTRAL_PORTALS,
+ * sub-categorised) and State tender portals (STATE_TENDERS), each card
+ * linking straight to the official portal. Supports central-category
+ * filtering and a search that spans both sections regardless of the
+ * current sidebar selection.
+ */
 import { useState } from 'react'
-import { ExternalLink, Building2, MapPin, ChevronRight } from 'lucide-react'
+import { ExternalLink, Building2, MapPin, ChevronRight, Search } from 'lucide-react'
 
-const CENTRAL_PORTALS = [
+// Central Government & PSU e-procurement portals (eProcure, GEM, CPPP,
+// Railways/IREPS, Defence, various PSUs, and third-party aggregators),
+// each linking directly to the official procurement portal.
+export const CENTRAL_PORTALS = [
   { name: 'eProcure (Central)',  url: 'https://eprocure.gov.in/eprocure/app',            desc: 'Central Govt NIC eProcurement', category: 'Central Procurement' },
   { name: 'GEM',                 url: 'https://gem.gov.in',                              desc: 'Government e-Marketplace', category: 'Central Procurement' },
   { name: 'CPPP',                url: 'https://eprocure.gov.in/cppp/',                   desc: 'Central Public Procurement Portal', category: 'Central Procurement' },
@@ -20,7 +35,8 @@ const CENTRAL_PORTALS = [
   { name: 'Tender Tiger',        url: 'https://www.tendertiger.com',                    desc: 'India\'s largest tender search', category: 'Aggregators' },
 ]
 
-const STATE_TENDERS = [
+// One official e-tendering portal per state/UT, each linking directly to that state's tender system
+export const STATE_TENDERS = [
   { state: 'Andhra Pradesh',    name: 'AP eProcurement',  url: 'https://tender.apeprocurement.gov.in', desc: 'AP state tender portal' },
   { state: 'Arunachal Pradesh', name: 'Arunachal Tenders',url: 'https://arunachaltenders.gov.in',      desc: 'AR state tender portal' },
   { state: 'Assam',             name: 'Assam Tenders',    url: 'https://assamtenders.gov.in',          desc: 'Assam state tender portal' },
@@ -53,6 +69,7 @@ const STATE_TENDERS = [
   { state: 'West Bengal',       name: 'WB Tenders',       url: 'https://wbtenders.gov.in',             desc: 'West Bengal tender portal' },
 ]
 
+// Central portal category -> Tailwind badge colour classes
 const CATEGORY_COLORS = {
   'Central Procurement': 'bg-blue-50 text-blue-700',
   'Railways':            'bg-orange-50 text-orange-700',
@@ -61,10 +78,12 @@ const CATEGORY_COLORS = {
   'Aggregators':         'bg-green-50 text-green-700',
 }
 
+// Sidebar sub-category order/list for the Central & PSU section
 const CENTRAL_CATEGORIES = ['Central Procurement', 'Railways', 'Defence', 'PSU', 'Aggregators']
 
 const TOTAL_COUNT = CENTRAL_PORTALS.length + STATE_TENDERS.length
 
+// Card for one tender portal (central or state) — plain outbound link with a colour-coded category/state badge
 function LinkCard({ name, url, desc, badge, badgeClass }) {
   return (
     <a
@@ -85,35 +104,63 @@ function LinkCard({ name, url, desc, badge, badgeClass }) {
   )
 }
 
+/**
+ * Renders the government tender portal directory: a search box that spans
+ * both Central and State sections, a sidebar (desktop) / pill strip
+ * (mobile) for switching between "All", "Central & PSU" (with per-category
+ * sub-filters), and "State Tenders", and the resulting grid of portal link
+ * cards.
+ */
 export default function Tenders() {
-  const [section, setSection] = useState('all')
-  const [filter, setFilter]   = useState('all')
+  const [section, setSection] = useState('all') // which top-level section is shown: 'all' | 'central' | 'state'
+  const [filter, setFilter]   = useState('all') // active Central & PSU category filter
+  const [search, setSearch]   = useState('')    // search box value — spans every section, ignoring section/filter selection
 
   const filteredCentral = filter === 'all'
     ? CENTRAL_PORTALS
     : CENTRAL_PORTALS.filter(p => p.category === filter)
 
+  // Search spans every section/category, ignoring whatever is currently selected in the sidebar
+  const isSearching = search.trim().length > 0
+  const q = search.toLowerCase()
+  const searchedCentral = CENTRAL_PORTALS.filter(p =>
+    p.name.toLowerCase().includes(q) ||
+    p.desc.toLowerCase().includes(q) ||
+    p.category.toLowerCase().includes(q)
+  )
+  const searchedState = STATE_TENDERS.filter(s =>
+    s.name.toLowerCase().includes(q) ||
+    s.desc.toLowerCase().includes(q) ||
+    s.state.toLowerCase().includes(q)
+  )
+  const searchResultCount = searchedCentral.length + searchedState.length
+
+  // Sidebar/pill handler for "All Sections" — resets section/filter and scrolls to top
   function handleAllSections() {
     setSection('all')
     setFilter('all')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // Sidebar/pill handler for "Central & PSU" parent item — shows all central portals (no sub-category filter)
   function handleCentralParent() {
     setSection('central')
     setFilter('all')
   }
 
+  // Sidebar/pill handler for one Central & PSU sub-category (e.g. "Railways", "Defence")
   function handleCentralSub(cat) {
     setSection('central')
     setFilter(cat)
   }
 
+  // Sidebar/pill handler for "State Tenders"
   function handleState() {
     setSection('state')
     setFilter('all')
   }
 
+  // Which content sections to render below: "all" shows both, otherwise only the matching one
   const showCentral = section === 'all' || section === 'central'
   const showState   = section === 'all' || section === 'state'
 
@@ -136,9 +183,58 @@ export default function Tenders() {
         </p>
       </div>
 
+      {/* Search — spans every section, ignoring the current sidebar selection */}
+      <div className="mb-6 relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          placeholder="Search portals or states..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full pl-8 pr-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+        />
+      </div>
+
+      {/* While the search box has text, show flat cross-section results instead of the sidebar/pill browse view below */}
+      {isSearching ? (
+        <div>
+          <p className="text-xs text-muted-foreground mb-4">
+            {searchResultCount} result{searchResultCount !== 1 ? 's' : ''} for &ldquo;{search}&rdquo;
+          </p>
+          {searchResultCount === 0 ? (
+            <div className="py-16 text-center text-muted-foreground">No portals match your search.</div>
+          ) : (
+            <div className="space-y-8">
+              {searchedCentral.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-bold text-blue-700 mb-3">Central &amp; PSU</h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {searchedCentral.map(p => (
+                      <LinkCard key={p.name} name={p.name} url={p.url} desc={p.desc} badge={p.category} badgeClass={CATEGORY_COLORS[p.category]} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {searchedState.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-bold text-orange-700 mb-3">State Tenders</h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {searchedState.map(s => (
+                      <LinkCard key={s.state} name={s.name} url={s.url} desc={s.desc} badge={s.state} badgeClass="bg-orange-50 text-orange-700" />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+      <>
+
       {/* Mobile horizontal pill strip — hidden on md+ */}
       <div className="md:hidden mb-5 -mx-4 px-4">
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+          {/* Same section/filter options as the desktop sidebar, rendered as a scrollable pill row for mobile */}
           {[
             { label: 'All',                  action: handleAllSections,                        active: section === 'all' },
             { label: 'Central & PSU',        action: handleCentralParent,                      active: section === 'central' && filter === 'all' },
@@ -296,9 +392,11 @@ export default function Tenders() {
 
         </div>
       </div>
+      </>
+      )}
 
       <p className="mt-10 text-xs text-muted-foreground text-center border-t pt-6">
-        Linksdoor links directly to official government procurement portals. We are not affiliated with any government body.
+        StepsDoor links directly to official government procurement portals. We are not affiliated with any government body.
         Always verify tender details on the official portal before bidding.
       </p>
     </div>

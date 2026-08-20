@@ -1,3 +1,14 @@
+/**
+ * Home.jsx
+ *
+ * Public landing page mounted at `/` (see App.jsx). Aggregates a preview of
+ * every content type StepsDoor offers — private jobs, subscribed companies,
+ * freelance platforms, service providers, shopping/retail categories,
+ * government tenders, and government jobs — plus a hero search bar and an
+ * employer CTA. Each section fetches its own small slice of data in
+ * parallel on mount; failures are swallowed per-section so one broken API
+ * call doesn't blank the whole page.
+ */
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Search, MapPin, Clock, Building2, FileText, Briefcase, ArrowRight, IndianRupee, Users, ShoppingBag, Monitor, Shirt, Smartphone, ShoppingCart, Sparkles, Home as HomeIcon, BookOpen, Dumbbell, Store, Wrench, Truck, HeartPulse, GraduationCap, Globe, UtensilsCrossed, Plane, BadgeCheck, ExternalLink } from 'lucide-react'
@@ -9,6 +20,7 @@ import { storeService } from '@/services/storeService'
 import { timeAgo, formatDate } from '@/utils/formatDate'
 import { JOB_TYPES } from '@/utils/constants'
 
+// Compact preview card for one private job listing, used in the "Latest Jobs" section
 function JobCard({ job }) {
   const typeLabel = JOB_TYPES.find(t => t.value === job.job_type)?.label ?? job.job_type
   return (
@@ -36,6 +48,7 @@ function JobCard({ job }) {
   )
 }
 
+// Compact preview card for one government tender, used in the "Government Tenders" section
 function TenderCard({ tender }) {
   return (
     <Link
@@ -54,6 +67,7 @@ function TenderCard({ tender }) {
   )
 }
 
+// Compact preview card for one government job notification, used in the "Government Jobs" section
 function GovtJobCard({ job }) {
   return (
     <Link
@@ -72,6 +86,7 @@ function GovtJobCard({ job }) {
   )
 }
 
+// Small curated subset of freelance platforms shown on the homepage; the full list lives in Freelancers.jsx
 const FREELANCER_HIGHLIGHTS = [
   { name: 'Upwork',       url: 'https://www.upwork.com',       tag: 'Global' },
   { name: 'Fiverr',       url: 'https://www.fiverr.com',       tag: 'Global' },
@@ -87,6 +102,7 @@ const FREELANCER_HIGHLIGHTS = [
   { name: 'Flexjobs',     url: 'https://www.flexjobs.com',     tag: 'Remote' },
 ]
 
+// Category tiles shown in the "Service Providers" section; each links to /services (full directory lives in Services.jsx)
 const SERVICE_CATEGORIES = [
   { label: 'Marketplaces',   icon: Globe,          bg: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-100'   },
   { label: 'Home Repairs',   icon: Wrench,         bg: 'bg-cyan-50',   text: 'text-cyan-700',   border: 'border-cyan-100'   },
@@ -98,6 +114,7 @@ const SERVICE_CATEGORIES = [
   { label: 'Travel',         icon: Plane,          bg: 'bg-sky-50',    text: 'text-sky-700',    border: 'border-sky-100'    },
 ]
 
+// Category tiles shown in the "Retail Stores" section; each links to /retail-stores (full directory lives in RetailStores.jsx)
 const RETAIL_CATEGORIES = [
   { label: 'Supermarkets', icon: ShoppingCart, bg: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-100'  },
   { label: 'Fashion',      icon: Shirt,        bg: 'bg-pink-50',   text: 'text-pink-700',   border: 'border-pink-100'   },
@@ -109,6 +126,7 @@ const RETAIL_CATEGORIES = [
   { label: 'Beauty',       icon: Store,        bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-100' },
 ]
 
+// Category tiles shown in the "Shopping & Stores" section; each links to /shopping (full directory lives in Shopping.jsx)
 const SHOPPING_CATEGORIES = [
   { label: 'Marketplaces', icon: ShoppingCart, bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-100' },
   { label: 'Fashion',      icon: Shirt,        bg: 'bg-pink-50',    text: 'text-pink-700',    border: 'border-pink-100'   },
@@ -120,15 +138,28 @@ const SHOPPING_CATEGORIES = [
   { label: 'Sports',       icon: Dumbbell,     bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-100'    },
 ]
 
+/**
+ * Renders the homepage: hero search, "Latest Jobs", "Companies Hiring",
+ * "Freelance & Remote Work", "Service Providers", "Shopping & Stores",
+ * "Retail Stores", subscribed "Retail Stores on StepsDoor", side-by-side
+ * "Government Tenders"/"Government Jobs" previews, and an employer CTA
+ * banner. Serves as the discovery entry point for every content type in
+ * the app.
+ */
 export default function Home() {
   const navigate = useNavigate()
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState('') // controlled input for the hero search bar
   const [jobs, setJobs] = useState([])
   const [tenders, setTenders] = useState([])
   const [govtJobs, setGovtJobs] = useState([])
   const [companies, setCompanies] = useState([])
-  const [retailStores, setRetailStores] = useState([])
+  const [retailStores, setRetailStores] = useState([]) // subscribed retail stores that have a public website_url (used for the "on StepsDoor" preview)
 
+  // Fires once on mount: kicks off five independent preview fetches in
+  // parallel (latest jobs, tenders, govt jobs, subscribed companies,
+  // subscribed retail stores). Each request's failure is caught and
+  // swallowed individually so one down service doesn't blank the page —
+  // that section's list just stays empty and its "no data yet" copy shows.
   useEffect(() => {
     jobService.list({ page_size: 6 }).then(({ data }) => setJobs((data.results ?? data).slice(0, 6))).catch(() => {})
     tenderService.list({ page_size: 4 }).then(({ data }) => setTenders((data.results ?? data).slice(0, 4))).catch(() => {})
@@ -140,6 +171,9 @@ export default function Home() {
     }).catch(() => {})
   }, [])
 
+  // Hero search form submit handler — navigates to the Jobs listing page
+  // with the query encoded as a `search` query param (or with no param at
+  // all if the input was left blank/whitespace).
   const handleSearch = (e) => {
     e.preventDefault()
     navigate(`/jobs${searchQuery.trim() ? `?search=${encodeURIComponent(searchQuery.trim())}` : ''}`)
@@ -152,7 +186,7 @@ export default function Home() {
       <section className="bg-white border-b">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
-            Find Your Next Opportunity in India
+            Step into Your Perfect Door
           </h1>
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
             Private jobs, government tenders, sarkari naukri, freelance gigs &amp; shopping — all in one place.
@@ -198,6 +232,7 @@ export default function Home() {
               View all <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
+          {/* Empty state vs. up to 6 latest job previews */}
           {jobs.length === 0 ? (
             <p className="text-muted-foreground text-sm">No jobs yet — check back soon.</p>
           ) : (
@@ -207,13 +242,13 @@ export default function Home() {
           )}
         </section>
 
-        {/* Companies Hiring */}
+        {/* Companies Hiring — whole section hidden until the companies fetch resolves with at least one result */}
         {companies.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-xl font-bold flex items-center gap-2">
-                  <BadgeCheck className="h-5 w-5 text-primary" /> Companies Hiring on Linksdoor
+                  <BadgeCheck className="h-5 w-5 text-primary" /> Companies Hiring on StepsDoor
                 </h2>
                 <p className="text-sm text-muted-foreground mt-0.5">Verified companies — browse open positions and apply directly</p>
               </div>
@@ -221,6 +256,7 @@ export default function Home() {
                 View all <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
+            {/* Only the first 6 subscribed companies are previewed here; "View all" links to /companies for the rest */}
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {companies.slice(0, 6).map(company => (
                 <Link
@@ -359,13 +395,13 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Retail Stores on Linksdoor */}
+        {/* Retail Stores on StepsDoor — whole section hidden until there's at least one subscribed store with a website */}
         {retailStores.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-xl font-bold flex items-center gap-2">
-                  <BadgeCheck className="h-5 w-5 text-primary" /> Retail Stores on Linksdoor
+                  <BadgeCheck className="h-5 w-5 text-primary" /> Retail Stores on StepsDoor
                 </h2>
                 <p className="text-sm text-muted-foreground mt-0.5">Verified retail stores — visit their website or find a store near you</p>
               </div>
@@ -426,6 +462,7 @@ export default function Home() {
                 View all <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
+            {/* Empty state vs. up to 4 latest tender previews */}
             {tenders.length === 0 ? (
               <p className="text-muted-foreground text-sm">No tenders yet.</p>
             ) : (
@@ -448,6 +485,7 @@ export default function Home() {
                 View all <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
+            {/* Empty state vs. up to 4 latest govt job previews */}
             {govtJobs.length === 0 ? (
               <p className="text-muted-foreground text-sm">No government jobs yet.</p>
             ) : (
@@ -460,7 +498,7 @@ export default function Home() {
 
         {/* Employer CTA */}
         <section className="bg-primary rounded-2xl p-10 text-center text-primary-foreground">
-          <h2 className="text-2xl font-bold">Hiring? Post your jobs on Linksdoor</h2>
+          <h2 className="text-2xl font-bold">Hiring? Post your jobs on StepsDoor</h2>
           <p className="mt-2 text-primary-foreground/80 max-w-lg mx-auto">
             Reach thousands of active job seekers across India. Get your own branded career page included.
           </p>

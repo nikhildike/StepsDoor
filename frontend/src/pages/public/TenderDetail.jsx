@@ -1,3 +1,11 @@
+/**
+ * TenderDetail.jsx
+ *
+ * Public detail page for a single scraped government tender. Mounted at
+ * `/tenders/:id` (see App.jsx). Fetches the tender by id via
+ * `tenderService.get` and renders its metadata plus links to the source
+ * portal / tender document. No auth required — tenders are free to browse.
+ */
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { tenderService } from '@/services/tenderService'
@@ -6,6 +14,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ExternalLink, ArrowLeft, Calendar, MapPin, IndianRupee, Building2, Copy, Check, Hash, FileText } from 'lucide-react'
 
+// Tender category value -> display label (mirrors the backend Tender.category choices)
 const CATEGORIES = [
   { value: 'civil', label: 'Civil Works' },
   { value: 'it', label: 'IT & Software' },
@@ -17,16 +26,19 @@ const CATEGORIES = [
   { value: 'power', label: 'Power & Energy' },
 ]
 
+// Formats a numeric amount as INR currency (e.g. 150000 -> "₹1,50,000"); returns null when falsy so InfoRow can hide the row
 function formatINR(amount) {
   if (!amount) return null
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount)
 }
 
+// Formats an ISO date string into "DD Mon YYYY" (en-IN locale); returns an em-dash placeholder when missing
 function formatDate(dateStr) {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+// Labeled row showing one field of tender metadata; renders nothing if value is falsy (keeps the grid free of empty rows)
 function InfoRow({ icon: Icon, label, value }) {
   if (!value) return null
   return (
@@ -40,8 +52,10 @@ function InfoRow({ icon: Icon, label, value }) {
   )
 }
 
+// Small button that copies `text` to the clipboard and flashes a "Copied!" state for 2s
 function CopyBtn({ text, label }) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState(false) // controls the icon/label swap after a successful copy
+  // Click handler: writes to the clipboard, then resets the "Copied!" state after 2 seconds
   const copy = () => {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
@@ -59,11 +73,20 @@ function CopyBtn({ text, label }) {
   )
 }
 
+/**
+ * Renders the full detail view for one tender: title, IDs (with copy
+ * buttons), organisation/location/date metadata, an optional free-text
+ * description, and outbound links to the official portal and any
+ * downloadable document. Used when a job seeker/browser clicks a tender
+ * from the Tenders listing page.
+ */
 export default function TenderDetail() {
-  const { id } = useParams()
+  const { id } = useParams() // tender id from the /tenders/:id route
   const [tender, setTender] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // Fetch the tender by id whenever the route param changes; re-runs if the
+  // user navigates directly from one tender detail page to another.
   useEffect(() => {
     tenderService.get(id).then(({ data }) => setTender(data)).finally(() => setLoading(false))
   }, [id])
@@ -80,7 +103,9 @@ export default function TenderDetail() {
       <div className="bg-white border rounded-lg p-8">
         {/* Title + copy actions */}
         <div className="mb-4">
-          {/* Badge: state > category (if not other) > source portal */}
+          {/* Badge: state > category (if not other) > source portal.
+              IIFE picks the first available/meaningful value so the badge
+              never shows the generic "other" category. */}
           {(() => {
             const categoryLabel = CATEGORIES.find(c => c.value === tender.category)?.label
             const badgeText = tender.state
@@ -152,7 +177,7 @@ export default function TenderDetail() {
 
       <p className="mt-6 text-xs text-muted-foreground text-center">
         This tender notice was sourced from <strong>{tender.source_portal}</strong>.
-        Linksdoor is not affiliated with any government body. Verify all details on the official portal before bidding.
+        StepsDoor is not affiliated with any government body. Verify all details on the official portal before bidding.
       </p>
     </div>
   )

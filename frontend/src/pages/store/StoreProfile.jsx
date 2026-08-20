@@ -1,3 +1,14 @@
+/**
+ * Store Profile page.
+ *
+ * Route: `/store/profile` (nested under the store owner account layout).
+ * Access: store owner accounts only — companion to the backend `stores` app.
+ *
+ * Lets a store owner edit their store's public listing details (name,
+ * category, website, optional store-locator link for retail chains, tagline,
+ * description, contact phone). The available category list and some field
+ * labels switch depending on whether the store is `online` or `retail`.
+ */
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -6,6 +17,7 @@ import { storeService } from '@/services/storeService'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 
+// Category options shown when the store's type is "online" (e-commerce / D2C brands).
 const ONLINE_CATEGORIES = [
   { value: 'marketplaces', label: 'General Marketplaces' },
   { value: 'fashion',      label: 'Fashion & Apparel'    },
@@ -26,6 +38,7 @@ const ONLINE_CATEGORIES = [
   { value: 'other',        label: 'Other'                },
 ]
 
+// Category options shown when the store's type is "retail" (physical/chain stores).
 const RETAIL_CATEGORIES = [
   { value: 'supermarkets', label: 'Supermarkets & Hypermarkets' },
   { value: 'department',   label: 'Department Stores'           },
@@ -42,6 +55,11 @@ const RETAIL_CATEGORIES = [
   { value: 'other',        label: 'Other'                       },
 ]
 
+// Zod validation schema for the store profile form.
+// - name/category/website_url: required.
+// - store_locator_url: optional, but if provided must be a valid URL (empty string allowed).
+// - tagline: optional, capped at 255 chars.
+// - description/contact_phone: optional free text.
 const schema = z.object({
   name:              z.string().min(2, 'Store name is required'),
   category:          z.string().min(1, 'Select a category'),
@@ -52,15 +70,28 @@ const schema = z.object({
   contact_phone:     z.string().optional(),
 })
 
+/**
+ * Renders the store owner's editable store listing form. Category options and
+ * some labels/fields adapt based on the store's `store_type` (online vs retail).
+ */
 export default function StoreProfile() {
+  // Whether the "Changes saved" confirmation should currently be shown.
   const [saved, setSaved] = useState(false)
+  // Error message shown when saving the profile fails.
   const [error, setError] = useState('')
+  // Store type ('online' or 'retail'), fetched from the backend; drives which
+  // category list and labels (e.g. "Store Locator URL") are shown.
   const [storeType, setStoreType] = useState('online')
 
+  // React Hook Form wiring: register() binds inputs, reset() populates the form
+  // once store data loads.
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(schema),
   })
 
+  // Fetches the store owner's current store profile on mount, records its store_type,
+  // and populates the form via reset() (normalizing missing fields to empty strings/defaults).
+  // GET /stores/me/ (stores app).
   useEffect(() => {
     storeService.getMe().then(({ data }) => {
       setStoreType(data.store_type || 'online')
@@ -76,8 +107,13 @@ export default function StoreProfile() {
     }).catch(() => {})
   }, [reset])
 
+  // Picks the category option list to render in the <select> based on the store's type.
   const categories = storeType === 'retail' ? RETAIL_CATEGORIES : ONLINE_CATEGORIES
 
+  // Form submit handler: fires when the store profile form passes Zod validation and is submitted.
+  // Saves the updated fields and shows a temporary success message; on failure, surfaces
+  // the first validation/API error message returned by the backend.
+  // PATCH /stores/me/ (stores app).
   const onSubmit = async (data) => {
     try {
       setError('')
@@ -99,12 +135,15 @@ export default function StoreProfile() {
     <div className="max-w-lg space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Store Profile</h1>
+        {/* Text adapts based on store type since online vs retail stores appear on different public pages. */}
         <p className="text-muted-foreground text-sm mt-1">
           This information appears on the {storeType === 'retail' ? 'Retail Stores' : 'Shopping'} page
         </p>
       </div>
 
+      {/* Error banner for save failures. */}
       {error && <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{error}</p>}
+      {/* Temporary success confirmation after a successful save (auto-hides after 2.5s). */}
       {saved && <p className="text-sm text-green-700 bg-green-50 px-3 py-2 rounded-md">Changes saved.</p>}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -120,6 +159,7 @@ export default function StoreProfile() {
             {...register('category')}
             className="mt-1 w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
+            {/* Renders options from ONLINE_CATEGORIES or RETAIL_CATEGORIES depending on storeType. */}
             {categories.map(c => (
               <option key={c.value} value={c.value}>{c.label}</option>
             ))}
@@ -128,6 +168,7 @@ export default function StoreProfile() {
         </div>
 
         <div>
+          {/* Label wording differs for retail chains ("Brand Website") vs online stores ("Website"). */}
           <label className="text-sm font-medium">
             {storeType === 'retail' ? 'Brand Website URL' : 'Website URL'}
           </label>
@@ -135,6 +176,7 @@ export default function StoreProfile() {
           {errors.website_url && <p className="text-xs text-destructive mt-1">{errors.website_url.message}</p>}
         </div>
 
+        {/* Store locator field only makes sense for retail chains with physical branches. */}
         {storeType === 'retail' && (
           <div>
             <label className="text-sm font-medium">

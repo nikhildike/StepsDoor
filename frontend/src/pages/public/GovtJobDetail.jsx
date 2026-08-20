@@ -1,3 +1,11 @@
+/**
+ * GovtJobDetail.jsx
+ *
+ * Public detail page for a single scraped government job notification.
+ * Mounted at `/govt-jobs/:id` (see App.jsx). Fetches the job by id via
+ * `govtJobService.get` and renders vacancy/eligibility/date metadata plus
+ * links to the official portal and notification PDF. No auth required.
+ */
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { govtJobService } from '@/services/govtJobService'
@@ -6,11 +14,13 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ExternalLink, ArrowLeft, Calendar, MapPin, Users, GraduationCap, IndianRupee, Clock, Copy, Check, Hash } from 'lucide-react'
 
+// Formats an ISO date string into "DD Mon YYYY" (en-IN locale); returns null when missing so InfoRow hides the row
 function formatDate(dateStr) {
   if (!dateStr) return null
   return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+// Labeled row showing one field of job metadata; renders nothing if value is falsy (keeps the grid free of empty rows)
 function InfoRow({ icon: Icon, label, value }) {
   if (!value) return null
   return (
@@ -24,8 +34,10 @@ function InfoRow({ icon: Icon, label, value }) {
   )
 }
 
+// Small button that copies `text` to the clipboard and flashes a "Copied!" state for 2s
 function CopyBtn({ text, label }) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState(false) // controls the icon/label swap after a successful copy
+  // Click handler: writes to the clipboard, then resets the "Copied!" state after 2 seconds
   const copy = () => {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
@@ -43,17 +55,25 @@ function CopyBtn({ text, label }) {
   )
 }
 
+// Govt job category value -> display label (mirrors the backend GovtJob.category choices)
 const CATEGORIES = {
   civil_services: 'Civil Services', banking: 'Banking', railway: 'Railway',
   police: 'Police & Defence', teaching: 'Teaching', healthcare: 'Healthcare',
   psu: 'PSU', state_govt: 'State Government', other: 'Other',
 }
 
+/**
+ * Renders the full detail view for one government job notification: title,
+ * job ID (with copy button), vacancy/eligibility/pay metadata, key dates,
+ * and outbound links to the official portal and notification PDF. Used
+ * when a job seeker clicks a listing from the Govt Jobs page.
+ */
 export default function GovtJobDetail() {
-  const { id } = useParams()
+  const { id } = useParams() // govt job id from the /govt-jobs/:id route
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // Fetch the job notification by id whenever the route param changes.
   useEffect(() => {
     govtJobService.get(id).then(({ data }) => setJob(data)).finally(() => setLoading(false))
   }, [id])
@@ -119,7 +139,7 @@ export default function GovtJobDetail() {
 
       <p className="mt-6 text-xs text-muted-foreground text-center">
         This notification was sourced from <strong>{job.source_portal}</strong>.
-        Linksdoor is not affiliated with any government body. Verify all details on the official recruitment portal before applying.
+        StepsDoor is not affiliated with any government body. Verify all details on the official recruitment portal before applying.
       </p>
     </div>
   )

@@ -1,6 +1,19 @@
+/**
+ * Services.jsx
+ *
+ * Public directory page mounted at `/services` (see App.jsx). Entirely
+ * static, hand-curated content — no backend calls. Lists Indian service
+ * providers/platforms (legal, accounting, healthcare, logistics, etc.)
+ * grouped by category (SERVICE_GROUPS below), each linking straight to the
+ * provider's own site. Supports category filtering (sidebar on desktop,
+ * pill strip on mobile) and a search that spans every category.
+ */
 import { useState } from 'react'
-import { ExternalLink, Globe, Monitor, Scale, Calculator, IndianRupee, HeartPulse, GraduationCap, UtensilsCrossed, Truck, Wrench, Shield, Building2, Sparkles, Shirt, Camera, Plane, Recycle, Wifi } from 'lucide-react'
+import { ExternalLink, Globe, Monitor, Scale, Calculator, IndianRupee, HeartPulse, GraduationCap, UtensilsCrossed, Truck, Wrench, Shield, Building2, Sparkles, Shirt, Camera, Plane, Recycle, Wifi, Search } from 'lucide-react'
 
+// Static directory data: one entry per service category, each holding its
+// icon, accent color, blurb, and the list of providers shown as outbound
+// link cards. Hand-maintained content, not fetched from the backend.
 const SERVICE_GROUPS = [
   {
     id: 'marketplaces',
@@ -299,6 +312,7 @@ const SERVICE_GROUPS = [
   },
 ]
 
+// Per-category Tailwind class bundle keyed by the `color` name each SERVICE_GROUPS entry declares
 const COLOR_MAP = {
   blue:    { bg: 'bg-blue-50',    text: 'text-blue-700',    icon: 'text-blue-500',    border: 'border-blue-100'    },
   indigo:  { bg: 'bg-indigo-50',  text: 'text-indigo-700',  icon: 'text-indigo-500',  border: 'border-indigo-100'  },
@@ -320,6 +334,10 @@ const COLOR_MAP = {
   emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', icon: 'text-emerald-500', border: 'border-emerald-100' },
 }
 
+/**
+ * One service provider: a plain outbound link card with name and description.
+ * @param {{ provider: object, color: string }} props - provider entry from SERVICE_GROUPS and its group's color key
+ */
 function ProviderCard({ provider, color }) {
   const c = COLOR_MAP[color]
   return (
@@ -340,6 +358,14 @@ function ProviderCard({ provider, color }) {
   )
 }
 
+// Every provider, flattened with its group's colour/label attached — used for search
+export const ALL_PROVIDERS = SERVICE_GROUPS.flatMap(g => g.providers.map(p => ({ ...p, groupLabel: g.label, groupColor: g.color })))
+
+/**
+ * One category section: a colour-coded header (icon, label, provider count,
+ * optional blurb) followed by a grid of ProviderCard entries.
+ * @param {{ group: object }} props - one entry from SERVICE_GROUPS
+ */
 function ProviderGroup({ group }) {
   const c = COLOR_MAP[group.color]
   const Icon = group.icon
@@ -362,8 +388,14 @@ function ProviderGroup({ group }) {
   )
 }
 
+/**
+ * Renders the service-provider directory page: a sidebar (desktop) / pill
+ * strip (mobile) for filtering by category, the resulting grid of provider
+ * link cards, and a cross-category search.
+ */
 export default function Services() {
-  const [activeCategory, setActiveCategory] = useState('all')
+  const [activeCategory, setActiveCategory] = useState('all') // 'all' or a SERVICE_GROUPS id
+  const [search, setSearch] = useState('') // search box value — spans every category, ignoring the current selection
 
   const total = SERVICE_GROUPS.reduce((sum, g) => sum + g.providers.length, 0)
 
@@ -371,6 +403,17 @@ export default function Services() {
     ? SERVICE_GROUPS
     : SERVICE_GROUPS.filter(g => g.id === activeCategory)
 
+  // Search spans every category, ignoring whichever one is currently selected
+  const isSearching = search.trim().length > 0
+  const q = search.toLowerCase()
+  const searchedProviders = ALL_PROVIDERS.filter(p =>
+    p.name.toLowerCase().includes(q) ||
+    p.desc.toLowerCase().includes(q) ||
+    p.groupLabel.toLowerCase().includes(q)
+  )
+
+  // Sidebar/pill category click handler: switches category and scrolls to
+  // that section's DOM id, or back to the top when "all" is selected
   const handleCategoryClick = (id) => {
     setActiveCategory(id)
     if (id !== 'all') {
@@ -393,6 +436,37 @@ export default function Services() {
           Aggregators like Justdial & Sulekha list thousands of local vendors city-by-city.
         </p>
       </div>
+
+      {/* Search — spans every category, ignoring the current sidebar selection */}
+      <div className="mb-6 relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          placeholder="Search providers or categories..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full pl-8 pr-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+        />
+      </div>
+
+      {/* While searching, show a flat cross-category result list instead of the sidebar/pill browse layout below */}
+      {isSearching ? (
+        <div>
+          <p className="text-xs text-muted-foreground mb-4">
+            {searchedProviders.length} result{searchedProviders.length !== 1 ? 's' : ''} for &ldquo;{search}&rdquo;
+          </p>
+          {searchedProviders.length === 0 ? (
+            <div className="py-16 text-center text-muted-foreground">No providers match your search.</div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {searchedProviders.map(p => (
+                <ProviderCard key={p.name + p.groupLabel} provider={p} color={p.groupColor} />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+      <>
 
       {/* Sidebar + content layout */}
       <div className="flex gap-6 items-start">
@@ -419,6 +493,7 @@ export default function Services() {
 
               <div className="my-1 border-t" />
 
+              {/* One nav item per category, each showing its icon, label, and provider count */}
               {SERVICE_GROUPS.map(group => {
                 const c = COLOR_MAP[group.color]
                 const Icon = group.icon
@@ -456,6 +531,7 @@ export default function Services() {
             >
               All
             </button>
+            {/* One pill per category, highlighted when active — mirrors the desktop sidebar above */}
             {SERVICE_GROUPS.map(group => {
               const c = COLOR_MAP[group.color]
               const Icon = group.icon
@@ -478,21 +554,23 @@ export default function Services() {
           </div>
         </div>
 
-        {/* ── Main content ── */}
+        {/* ── Main content — renders every category section (or just the selected one) ── */}
         <div className="flex-1 min-w-0 space-y-10">
           {visibleGroups.map(group => (
             <ProviderGroup key={group.id} group={group} />
           ))}
-
-          <div className="border-t pt-6 space-y-2">
-            <p className="text-xs text-muted-foreground text-center">
-              Linksdoor is not affiliated with any platforms listed above. Links open in a new tab.
-            </p>
-            <p className="text-xs text-muted-foreground text-center">
-              ⚠️ The services sector churns frequently — platforms get acquired or shut down. Verify availability before engaging any vendor.
-            </p>
-          </div>
         </div>
+      </div>
+      </>
+      )}
+
+      <div className="border-t pt-6 space-y-2 mt-10">
+        <p className="text-xs text-muted-foreground text-center">
+          StepsDoor is not affiliated with any platforms listed above. Links open in a new tab.
+        </p>
+        <p className="text-xs text-muted-foreground text-center">
+          ⚠️ The services sector churns frequently — platforms get acquired or shut down. Verify availability before engaging any vendor.
+        </p>
       </div>
     </div>
   )

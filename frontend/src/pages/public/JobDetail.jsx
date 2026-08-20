@@ -1,3 +1,12 @@
+/**
+ * JobDetail.jsx
+ *
+ * Public detail page for a single private (company-posted) job listing.
+ * Mounted at `/jobs/:id` (see App.jsx). Fetches the job via `jobService.get`,
+ * lets any visitor click "Apply" (redirects to the company's own careers
+ * page/ATS after logging a click), and lets signed-in job seekers save the
+ * job for later via the shared `useSavedJobs` hook. No auth required to view.
+ */
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { MapPin, Clock, IndianRupee, ExternalLink, Bookmark, Building2 } from 'lucide-react'
@@ -11,16 +20,25 @@ import { formatSalaryRange } from '@/utils/formatCurrency'
 import { formatDate } from '@/utils/formatDate'
 import { JOB_TYPES } from '@/utils/constants'
 
+/**
+ * Renders the full detail view for one job: title/company header, meta
+ * (location, posted date, salary, expiry), a link to the company's other
+ * open positions, Apply/Save actions, and the full job description.
+ */
 export default function JobDetail() {
-  const { id } = useParams()
+  const { id } = useParams() // job id from the /jobs/:id route
   const navigate = useNavigate()
-  const { token } = useAuthStore()
+  const { token } = useAuthStore() // used to gate the Save action behind login
+  // Shared saved-jobs hook: tracks which jobs are saved, exposes a toggle,
+  // whether the current user is a job seeker, and per-job pending state
+  // (so the Save button can disable itself while the request is in flight).
   const { isSaved, toggleSave, isSeeker, pending } = useSavedJobs()
 
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [applying, setApplying] = useState(false)
+  const [applying, setApplying] = useState(false) // true while the Apply click-tracking request is in flight
 
+  // Fetch the job by id whenever the route param changes.
   useEffect(() => {
     jobService.get(id).then(({ data }) => setJob(data)).finally(() => setLoading(false))
   }, [id])
@@ -31,6 +49,10 @@ export default function JobDetail() {
   const typeLabel = JOB_TYPES.find(t => t.value === job.job_type)?.label ?? job.job_type
   const jobId = parseInt(id)
 
+  // "Apply Now" handler — fires when either Apply button is clicked.
+  // Logs the click via jobService.trackClick (for company analytics) and
+  // opens the returned redirect URL in a new tab; falls back to the job's
+  // own redirect_url if the tracking call fails so Apply never breaks.
   const handleApply = async () => {
     setApplying(true)
     try {
@@ -43,6 +65,8 @@ export default function JobDetail() {
     }
   }
 
+  // "Save Job" handler — sends anonymous visitors to /login, no-ops for
+  // non-seeker accounts (e.g. companies), otherwise toggles the saved state.
   const handleSave = () => {
     if (!token) { navigate('/login'); return }
     if (!isSeeker) return
@@ -85,7 +109,7 @@ export default function JobDetail() {
           <Badge variant="outline">{job.city}</Badge>
         </div>
 
-        {/* Career page link */}
+        {/* Career page link — only shown when the job's company has a public career page slug */}
         {job.company_slug && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Building2 className="h-4 w-4 shrink-0" />
@@ -116,6 +140,7 @@ export default function JobDetail() {
           </button>
         </div>
 
+        {/* Prompt anonymous visitors to sign in in order to save the job */}
         {!token && (
           <p className="text-xs text-muted-foreground">
             <button onClick={() => navigate('/login')} className="text-primary hover:underline">Sign in</button>

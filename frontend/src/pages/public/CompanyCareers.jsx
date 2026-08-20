@@ -1,9 +1,20 @@
+/**
+ * CompanyCareers.jsx
+ *
+ * Public, branded "careers page" for a single subscribed company. Mounted
+ * at `/careers/:slug` (see App.jsx) — this is the page StepsDoor gives each
+ * paying company subscription (see CLAUDE.md `subscriptions`/`companies`
+ * apps) so job seekers land somewhere company-specific rather than the
+ * generic Jobs listing. Fetches the company profile + its open jobs in one
+ * call via `companyService.careers(slug)`.
+ */
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { MapPin, Briefcase, ExternalLink, Globe } from 'lucide-react'
 import { companyService } from '@/services/companyService'
 import { jobService } from '@/services/jobService'
 
+// Job type value -> display label (mirrors the backend Job.job_type choices)
 const JOB_TYPE_LABELS = {
   full_time: 'Full Time',
   part_time: 'Part Time',
@@ -11,7 +22,11 @@ const JOB_TYPE_LABELS = {
   internship: 'Internship',
 }
 
+// One open-position card on the company's careers page, with an Apply button.
 function JobCard({ job }) {
+  // Apply click handler — logs the click via jobService.trackClick (for the
+  // company's analytics dashboard) then opens the redirect URL; falls back
+  // to the job's own redirect_url if tracking fails so Apply never breaks.
   const handleApply = async () => {
     try {
       const { data } = await jobService.trackClick(job.id)
@@ -21,6 +36,7 @@ function JobCard({ job }) {
     }
   }
 
+  // Formats the salary range for display: "₹X.XL – ₹Y.YL/yr", "From ₹X.XL/yr", or null when unset
   const salary =
     job.salary_min && job.salary_max
       ? `₹${(job.salary_min / 100000).toFixed(1)}L – ₹${(job.salary_max / 100000).toFixed(1)}L/yr`
@@ -54,13 +70,21 @@ function JobCard({ job }) {
   )
 }
 
+/**
+ * Renders a company's branded careers page: header (logo, name,
+ * description, website/contact), a list of its open job postings, and a
+ * "Powered by StepsDoor" footer. Shows a 404-style message if the slug
+ * doesn't resolve to a company.
+ */
 export default function CompanyCareers() {
-  const { slug } = useParams()
+  const { slug } = useParams() // company slug from the /careers/:slug route
   const [company, setCompany] = useState(null)
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
-  const [notFound, setNotFound] = useState(false)
+  const [notFound, setNotFound] = useState(false) // true when the API returns 404 for this slug
 
+  // Fetch the company profile + its open jobs together whenever the slug
+  // changes; a 404 response flips notFound instead of leaving a blank page.
   useEffect(() => {
     companyService.careers(slug)
       .then(({ data }) => {
@@ -126,6 +150,7 @@ export default function CompanyCareers() {
           Open Positions <span className="text-muted-foreground font-normal text-base">({jobs.length})</span>
         </h2>
 
+        {/* Empty state vs. list of open jobs for this company */}
         {jobs.length === 0 ? (
           <div className="bg-white border border-border rounded-xl p-12 text-center text-muted-foreground">
             <Briefcase className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -140,7 +165,7 @@ export default function CompanyCareers() {
       </div>
 
       <p className="text-center text-xs text-muted-foreground">
-        Powered by <a href="/" className="text-primary hover:underline">Linksdoor</a>
+        Powered by <a href="/" className="text-primary hover:underline">StepsDoor</a>
       </p>
     </div>
   )

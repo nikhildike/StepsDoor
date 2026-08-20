@@ -1,3 +1,12 @@
+"""
+django-import-export Resource definitions for the `tenders` app.
+
+These back the "Import"/"Export" buttons on the `TenderAdmin` and `ScraperSourceAdmin`
+change lists (both registered as `ImportExportModelAdmin` in admin.py), letting staff
+bulk-load tenders or portal sources from CSV/Excel instead of entering them one at a time
+(e.g. seeding `ScraperSource` rows for a batch of new portals, or backfilling historical
+tenders from an external export).
+"""
 from import_export import resources
 
 from .models import Tender, ScraperSource

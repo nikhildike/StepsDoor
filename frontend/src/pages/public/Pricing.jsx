@@ -1,8 +1,21 @@
+/**
+ * Pricing.jsx
+ *
+ * Public pricing page mounted at `/pricing` (see App.jsx). Presents the
+ * "career page" subscription plans (employer / online store / retail store
+ * — see CLAUDE.md `subscriptions`/`payments` apps) with a billing-period
+ * selector, a job-link add-on pricing explainer, a comparison table, and an
+ * FAQ. Routes visitors to `/register` (anonymous) or their existing
+ * subscription dashboard (signed-in company/store owner) depending on
+ * auth state.
+ */
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CheckCircle, Zap, Link2, MapPin, Plus, ShoppingBag, Briefcase } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 
+// Career-page subscription tiers by billing period. `perMonth` and `saving`
+// are precomputed here (not derived from the API) purely for display.
 const CAREER_PAGE_PLANS = [
   {
     id:       '1m',
@@ -41,12 +54,13 @@ const CAREER_PAGE_PLANS = [
   },
 ]
 
+// Feature bullet lists shown in the "who is this for" cards, one per account role
 const EMPLOYER_FEATURES = [
   'Branded /careers/your-company page',
   '3 job links included (always free)',
   'Click analytics per job link',
   'Redirect to your ATS / careers site',
-  'Visible in the Linksdoor company directory',
+  'Visible in the StepsDoor company directory',
 ]
 
 const STORE_FEATURES = [
@@ -65,21 +79,32 @@ const RETAIL_STORE_FEATURES = [
   'Category-filtered discovery by local shoppers',
 ]
 
+// Formats a numeric amount as INR currency with no decimals (e.g. 299 -> "₹299")
 function formatINR(amount) {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency', currency: 'INR', maximumFractionDigits: 0,
   }).format(amount)
 }
 
+/**
+ * Renders the full pricing page: role explainer cards, a billing-period
+ * plan picker with a running CTA summary, the job-link add-on pricing
+ * section, a plan comparison table, an FAQ, and (for anonymous visitors) a
+ * bottom CTA banner.
+ */
 export default function Pricing() {
   const { token, user } = useAuthStore()
   const navigate = useNavigate()
-  const [selectedPlan, setSelectedPlan] = useState('6m')
+  const [selectedPlan, setSelectedPlan] = useState('6m') // currently highlighted billing-period plan id, defaults to the "Best Value" 6-month tier
 
+  // Derived role flags used to decide CTA destinations/labels below
   const isStoreOwner = !!(token && user?.is_store_owner)
   const isCompany    = !!(token && user?.is_company && !user?.is_store_owner)
   const isSeeker     = !!(token && user && !user.is_company && !user.is_store_owner)
 
+  // CTA click handler — routes signed-in store owners/companies to their
+  // existing subscription management page, and anonymous visitors to
+  // Register with the chosen role pre-selected via router location state.
   const handleSelect = (role = 'company') => {
     if (isStoreOwner) {
       navigate('/store/subscription')
@@ -101,7 +126,7 @@ export default function Pricing() {
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary text-sm font-medium px-4 py-1.5 rounded-full mb-4">
             <Zap className="h-4 w-4" /> Simple, transparent pricing
           </div>
-          <h1 className="text-4xl font-bold">Hire smarter on Linksdoor</h1>
+          <h1 className="text-4xl font-bold">Hire smarter on StepsDoor</h1>
           <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">
             Get a branded career page, post job links, and reach thousands of active job seekers across India — starting at just ₹299/month.
           </p>
@@ -177,6 +202,7 @@ export default function Pricing() {
             </p>
           </div>
 
+          {/* Billing-period plan cards — clicking a card sets selectedPlan, which drives the CTA summary below */}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {CAREER_PAGE_PLANS.map(plan => {
               const isSelected = selectedPlan === plan.id
@@ -223,6 +249,7 @@ export default function Pricing() {
           </div>
 
           {/* CTA */}
+          {/* CTA summary for whichever plan is currently selected, plus role-specific buttons */}
           <div className="mt-8 bg-white border border-border rounded-2xl p-8 flex flex-col md:flex-row gap-8 items-center">
             {(() => {
               const plan = CAREER_PAGE_PLANS.find(p => p.id === selectedPlan)
@@ -372,6 +399,7 @@ export default function Pricing() {
                 </tr>
               </thead>
               <tbody>
+                {/* One row per billing-period plan; the first plan (1 month) has no savings, so its cell shows an em-dash */}
                 {CAREER_PAGE_PLANS.map((plan, i) => (
                   <tr key={plan.id} className={`border-b last:border-0 ${plan.highlight ? 'bg-primary/5' : ''}`}>
                     <td className="px-6 py-4 font-medium flex items-center gap-2">
@@ -398,10 +426,11 @@ export default function Pricing() {
         {/* ── FAQ ── */}
         <div className="border-t pt-12 max-w-2xl mx-auto space-y-6">
           <h2 className="text-center text-xl font-semibold mb-6">Frequently asked questions</h2>
+          {/* Inline array of Q&A pairs, mapped directly to JSX (not a module-level constant since it's only used here) */}
           {[
             {
               q: 'What is included in the career page subscription?',
-              a: 'Your branded Linksdoor career page (/careers/your-company), up to 3 active job links, click analytics, and redirection to your own ATS or careers website.',
+              a: 'Your branded StepsDoor career page (/careers/your-company), up to 3 active job links, click analytics, and redirection to your own ATS or careers website.',
             },
             {
               q: 'How are extra job links billed?',
@@ -413,7 +442,7 @@ export default function Pricing() {
             },
             {
               q: 'How do candidates apply?',
-              a: "Candidates click Apply on Linksdoor and are redirected to your own careers page or ATS. We don't store applications — you own the process.",
+              a: "Candidates click Apply on StepsDoor and are redirected to your own careers page or ATS. We don't store applications — you own the process.",
             },
             {
               q: 'Is there a setup fee or contract?',
@@ -421,7 +450,7 @@ export default function Pricing() {
             },
             {
               q: 'What does a Store Owner subscription include?',
-              a: 'Your store listing appears on the Linksdoor Shopping page with a verified badge, direct link, and category filter. You also get a branded career page (/careers/your-store) and 3 free job links — same as an employer subscription.',
+              a: 'Your store listing appears on the StepsDoor Shopping page with a verified badge, direct link, and category filter. You also get a branded career page (/careers/your-store) and 3 free job links — same as an employer subscription.',
             },
             {
               q: 'Can I be both an employer and a store owner?',

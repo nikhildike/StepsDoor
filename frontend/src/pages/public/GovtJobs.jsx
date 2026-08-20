@@ -1,7 +1,22 @@
+/**
+ * GovtJobs.jsx
+ *
+ * Public directory page mounted at `/govt-jobs` (see App.jsx). NOTE: this is
+ * distinct from the scraped GovtJob listings shown via GovtJobDetail.jsx —
+ * this page is a static, curated directory of official recruitment portal
+ * links, split into Central Government bodies (CENTRAL_BODIES) and
+ * State/UT departments (STATE_DEPARTMENTS), each card linking straight to
+ * the official site (UPSC, SSC, state PSCs, police boards, etc.). Supports
+ * central-category filtering, multi-select state checkboxes, and a search
+ * that spans both sections regardless of the current sidebar selection.
+ */
 import { useState } from 'react'
-import { ExternalLink, Building2, MapPin, ChevronDown, ChevronRight } from 'lucide-react'
+import { ExternalLink, Building2, MapPin, ChevronDown, ChevronRight, Search } from 'lucide-react'
 
-const CENTRAL_BODIES = [
+// Central Government recruitment bodies (UPSC, SSC, banking, railway,
+// defence, PSUs, ports, health, education, research, judiciary), each
+// linking directly to that body's official recruitment portal.
+export const CENTRAL_BODIES = [
   // Civil Services
   { name: 'UPSC',             url: 'https://upsc.gov.in',                              desc: 'Union Public Service Commission',        category: 'Civil Services' },
   { name: 'SSC',              url: 'https://ssc.gov.in',                               desc: 'Staff Selection Commission',             category: 'Civil Services' },
@@ -78,6 +93,7 @@ const CENTRAL_BODIES = [
   { name: 'High Court (NIC)', url: 'https://districts.ecourts.gov.in',               desc: 'District Courts — all states',         category: 'Judiciary' },
 ]
 
+// Central body category -> Tailwind badge colour classes
 const CATEGORY_COLORS = {
   'Civil Services': 'bg-blue-50 text-blue-700',
   'Banking':        'bg-green-50 text-green-700',
@@ -374,6 +390,7 @@ const STATE_DEPARTMENTS = {
   ],
 }
 
+// State department category -> Tailwind badge colour classes
 const DEPT_CATEGORY_COLORS = {
   'PSC':               'bg-blue-50 text-blue-700',
   'Subordinate Board': 'bg-indigo-50 text-indigo-700',
@@ -385,6 +402,7 @@ const DEPT_CATEGORY_COLORS = {
   'Other':             'bg-gray-50 text-gray-700',
 }
 
+// Card for one recruitment portal (central body or state department) — plain outbound link with a colour-coded category badge
 function LinkCard({ name, url, desc, badge, badgeClass }) {
   return (
     <a
@@ -405,10 +423,23 @@ function LinkCard({ name, url, desc, badge, badgeClass }) {
   )
 }
 
+// Every state department, flattened with its state name attached — used for search
+export const ALL_STATE_DEPTS = Object.entries(STATE_DEPARTMENTS).flatMap(([state, depts]) =>
+  depts.map(d => ({ ...d, state }))
+)
+
+/**
+ * Renders the government recruitment portal directory: a search box that
+ * spans both Central and State sections, a sidebar (desktop) / pill strip
+ * (mobile) for switching between "All", "Central Government" (with
+ * per-category sub-filters), and "State & UT Portals" (with a multi-select
+ * state checklist), and the resulting grid of portal link cards.
+ */
 export default function GovtJobs() {
-  const [section, setSection] = useState('all')
-  const [filter, setFilter] = useState('all')
-  const [selectedStates, setSelectedStates] = useState([])  // empty = All
+  const [section, setSection] = useState('all')   // which top-level section is shown: 'all' | 'central' | 'state'
+  const [filter, setFilter] = useState('all')      // active Central Government category filter
+  const [selectedStates, setSelectedStates] = useState([])  // empty = All states shown as an overview grid; non-empty = only these states' departments
+  const [search, setSearch] = useState('')          // search box value — spans every section, ignoring section/filter/state selection
 
   const categories = [...new Set(CENTRAL_BODIES.map(b => b.category))]
   const filteredCentral = filter === 'all'
@@ -417,28 +448,53 @@ export default function GovtJobs() {
 
   const stateNames = Object.keys(STATE_DEPARTMENTS).sort()
 
+  // Search spans every section/state, ignoring whatever is currently selected
+  const isSearching = search.trim().length > 0
+  const q = search.toLowerCase()
+  const searchedCentral = CENTRAL_BODIES.filter(b =>
+    b.name.toLowerCase().includes(q) ||
+    b.desc.toLowerCase().includes(q) ||
+    b.category.toLowerCase().includes(q)
+  )
+  const searchedState = ALL_STATE_DEPTS.filter(d =>
+    d.name.toLowerCase().includes(q) ||
+    d.desc.toLowerCase().includes(q) ||
+    d.category.toLowerCase().includes(q) ||
+    d.state.toLowerCase().includes(q)
+  )
+  const searchResultCount = searchedCentral.length + searchedState.length
+
   const allChecked = selectedStates.length === 0
 
+  // "All States & UTs" checkbox handler — clears the selection so every
+  // state renders as the default overview grid.
   function toggleAll() {
     setSelectedStates([])
   }
 
+  // Per-state checkbox handler — adds/removes one state from the multi-select list
   function toggleState(state) {
     setSelectedStates(prev =>
       prev.includes(state) ? prev.filter(s => s !== state) : [...prev, state]
     )
   }
 
+  // Sidebar/pill handler for "All Sections" — resets to showing both
+  // Central and State sections and scrolls back to the top.
   function handleSectionAll() {
     setSection('all')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // Sidebar/pill handler for the Central Government section (and its
+  // per-category sub-items) — switches to the 'central' section and applies
+  // the given category filter (or 'all' for "All Central").
   function handleSectionCentral(cat) {
     setSection('central')
     setFilter(cat || 'all')
   }
 
+  // Sidebar/pill handler for the State & UT Portals section
   function handleSectionState() {
     setSection('state')
   }
@@ -459,6 +515,54 @@ export default function GovtJobs() {
           Click any card to go directly to the official site.
         </p>
       </div>
+
+      {/* Search — spans every section/state, ignoring the current sidebar selection */}
+      <div className="mb-6 relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <input
+          type="text"
+          placeholder="Search portals, departments or states..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full pl-8 pr-3 py-2 text-sm border border-border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+        />
+      </div>
+
+      {/* Search results view replaces the sidebar+content layout entirely while a query is active */}
+      {isSearching ? (
+        <div>
+          <p className="text-xs text-muted-foreground mb-4">
+            {searchResultCount} result{searchResultCount !== 1 ? 's' : ''} for &ldquo;{search}&rdquo;
+          </p>
+          {searchResultCount === 0 ? (
+            <div className="py-16 text-center text-muted-foreground">No portals match your search.</div>
+          ) : (
+            <div className="space-y-8">
+              {searchedCentral.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-bold text-blue-700 mb-3">Central Government</h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {searchedCentral.map(b => (
+                      <LinkCard key={b.name} name={b.name} url={b.url} desc={b.desc} badge={b.category} badgeClass={CATEGORY_COLORS[b.category] || 'bg-gray-50 text-gray-700'} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {searchedState.length > 0 && (
+                <div>
+                  <h2 className="text-sm font-bold text-orange-700 mb-3">State &amp; UT Departments</h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {searchedState.map(d => (
+                      <LinkCard key={d.state + d.name} name={d.name} url={d.url} desc={`${d.state} — ${d.desc}`} badge={d.state} badgeClass="bg-orange-50 text-orange-700" />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+      <>
 
       {/* Mobile section strip (visible only on small screens) */}
       <div className="flex md:hidden gap-2 mb-6 overflow-x-auto pb-1 -mx-1 px-1">
@@ -715,13 +819,15 @@ export default function GovtJobs() {
             </div>
           )}
 
-          <p className="mt-10 text-xs text-muted-foreground text-center border-t pt-6">
-            Linksdoor links directly to official government recruitment portals. We are not affiliated with any government body.
-            Always check the official notification before applying.
-          </p>
-
         </div>
       </div>
+      </>
+      )}
+
+      <p className="mt-10 text-xs text-muted-foreground text-center border-t pt-6">
+        StepsDoor links directly to official government recruitment portals. We are not affiliated with any government body.
+        Always check the official notification before applying.
+      </p>
     </div>
   )
 }

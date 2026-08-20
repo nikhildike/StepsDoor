@@ -49,11 +49,12 @@ _HEADER_PREFIXES = (
 
 
 def _clean(text):
+    """Collapse any run of whitespace (including newlines/tabs from HTML) into single spaces and strip ends."""
     return ' '.join((text or '').split())
 
 
 def _parse_amount(text):
-    """Convert '₹ 12,34,567.00' or '1234567' to float."""
+    """Convert an Indian-currency-formatted string like '₹ 12,34,567.00' or 'Rs 1234567' to a float, stripping currency symbols/letters and thousands separators; returns None if it isn't parseable as a number."""
     if not text:
         return None
     cleaned = re.sub(r'[₹,RsINR\s]', '', text).strip()
@@ -65,8 +66,22 @@ def _parse_amount(text):
 
 class GenericTenderSpider(scrapy.Spider):
     """
-    Handles NIC eProcurement portals automatically.
-    Falls back through multiple CSS selector strategies.
+    Handles Indian state/central tender portals running the shared NIC
+    eProcurement platform automatically, without portal-specific code — most
+    state tender portals (Maharashtra, Rajasthan, Karnataka, Kerala, etc.) and
+    the central eprocure.gov.in portal share near-identical HTML structure, so
+    one spider with a few CSS-selector fallback strategies covers all of them.
+    Falls back through multiple CSS selector strategies (see NIC_ROW_SELECTORS)
+    to find the tender listing table, and extracts the NIC-native Tender ID
+    (see _NIC_TENDER_ID_RE) to key updates reliably even when reference
+    numbers vary by department.
+
+    Registered as the 'generic_tender' spider (matches ITEM_PIPELINES'
+    TenderPipeline via each yielded item's 'tender_id' key). Run either
+    manually via `scrapy crawl generic_tender -a source_portal=...`, or
+    automatically by the Celery `scrape_portal` task, which passes
+    `start_url`/`source_portal` sourced from a `ScraperSource` DB row
+    (apps.tenders.models.ScraperSource).
     """
     name = 'generic_tender'
 
@@ -76,6 +91,16 @@ class GenericTenderSpider(scrapy.Spider):
     }
 
     def __init__(self, start_url=None, source_portal=None, *args, **kwargs):
+        """
+        Constructed by Scrapy when the spider is launched (CLI `-a` args or
+        the Celery task's crawler-process kwargs supply start_url/source_portal).
+        If start_url isn't provided, falls back to the first active
+        ScraperSource row configured to use this spider, so it's still
+        runnable standalone (e.g. `scrapy crawl generic_tender` with no args)
+        for debugging. Sets self.start_urls (read by Scrapy to seed the
+        crawl) and self.source_portal_key (derived from the URL's domain if
+        no explicit source_portal was given) used to tag every scraped item.
+        """
         super().__init__(*args, **kwargs)
         if not start_url:
             # If called without args, pick first active source from DB
@@ -96,6 +121,16 @@ class GenericTenderSpider(scrapy.Spider):
     # ------------------------------------------------------------------ #
 
     def parse(self, response):
+        """
+        Default Scrapy callback for every response to a start_url or a
+        followed pagination link. Triggered automatically by the Scrapy
+        engine for each request whose callback wasn't overridden. Locates the
+        listing table's data rows, parses each into an item dict, and either
+        follows the tender's detail-page link (yielding a Request with
+        _parse_detail as the callback) or yields the item directly if no
+        detail link was found. Also yields a follow-up Request for the next
+        listing page, if pagination is present. Yields Items and/or Requests.
+        """
         rows = self._find_rows(response)
 
         if not rows:
@@ -134,7 +169,13 @@ class GenericTenderSpider(scrapy.Spider):
     # ------------------------------------------------------------------ #
 
     def _find_rows(self, response):
-        """Try each selector strategy, return first that finds rows."""
+        """
+        Try each selector strategy in NIC_ROW_SELECTORS (most-specific NIC
+        table IDs/classes first, plain `table tr` as last resort), return the
+        first that finds at least one row containing data cells (<td>).
+        Called by parse() to locate the listing table before per-row parsing.
+        Returns a list of row Selectors, or [] if nothing matched.
+        """
         for selector in NIC_ROW_SELECTORS:
             rows = response.css(selector)
             # Skip header rows — need at least 3 data rows to be confident
@@ -144,6 +185,13 @@ class GenericTenderSpider(scrapy.Spider):
         return []
 
     def _parse_row(self, row, response):
+        """
+        Convert a single tender listing <tr> into an item dict, or None if the
+        row doesn't look like real tender data (too few cells, missing
+        tender_id/title, a header row, a homepage-widget row that concatenates
+        multiple tenders, etc — see the guard clauses below). Called by
+        parse() for each row found by _find_rows().
+        """
         cells = row.css('td')
         if len(cells) < 3:
             return None
@@ -151,6 +199,9 @@ class GenericTenderSpider(scrapy.Spider):
         cell_texts = [_clean(' '.join(c.css('::text').getall())) for c in cells]
 
         def get_col(indices):
+            # Return the first non-empty cell among the given column indices — NIC
+            # portal column layouts vary slightly, so callers pass a priority list
+            # (see NIC_TENDER_ID_COLS / NIC_TITLE_COLS / NIC_ORG_COLS / NIC_DEADLINE_COLS above).
             for i in indices:
                 if i < len(cell_texts) and cell_texts[i]:
                     return cell_texts[i]
@@ -238,8 +289,14 @@ class GenericTenderSpider(scrapy.Spider):
 
     def _parse_detail(self, response, item):
         """
-        Extract additional fields from the tender detail page.
-        Tries common NIC eProcurement detail page patterns.
+        Callback for the tender's detail page, invoked via response.follow()
+        from parse() when a row had a detail URL. Extracts additional fields
+        only available there — description, document URL, published/opening
+        dates, EMD/estimated value, organisation, state, and a refined NIC
+        Tender ID — merges them into `item` (passed in via cb_kwargs), and
+        yields the completed item dict for the pipelines to save. Tries
+        common NIC eProcurement detail page patterns since the exact markup
+        varies slightly by state deployment.
         """
         # NIC portals use short-lived server sessions. If the session expired between
         # the listing request and the detail request, yield the item as-is.
@@ -316,14 +373,19 @@ class GenericTenderSpider(scrapy.Spider):
     # ------------------------------------------------------------------ #
 
     def _find_next_page(self, response):
-        """Try common 'Next' link patterns used by NIC portals."""
+        """
+        Try common 'Next' link patterns used by NIC portals. Called by
+        parse() after processing the current page's rows. Returns the href
+        of the first matching selector, or None if there's no next page
+        (i.e. this is the last page of results).
+        """
         for selector in [
-            'a:contains("Next")::attr(href)',
-            'a:contains("next")::attr(href)',
-            'a:contains(">>")::attr(href)',
-            'a.next::attr(href)',
-            'a#nextPage::attr(href)',
-            'li.next a::attr(href)',
+            'a:contains("Next")::attr(href)',   # link literally labelled "Next"
+            'a:contains("next")::attr(href)',   # lowercase variant
+            'a:contains(">>")::attr(href)',     # arrow-style pagination label
+            'a.next::attr(href)',               # common CSS class for the next-page control
+            'a#nextPage::attr(href)',           # NIC eProcurement's specific pager element id
+            'li.next a::attr(href)',            # Bootstrap-pagination style: <li class="next"><a>
         ]:
             href = response.css(selector).get()
             if href:
@@ -331,4 +393,11 @@ class GenericTenderSpider(scrapy.Spider):
         return None
 
     def _errback(self, failure):
+        """
+        Scrapy errback attached to every request this spider issues (listing
+        and detail-page follows). Invoked by the engine when a request fails
+        (network error, non-2xx after retries exhausted, etc.) instead of
+        raising into the spider; just logs a warning so one bad request
+        doesn't crash the whole crawl. Returns nothing (swallows the failure).
+        """
         logger.warning(f"[{self.source_portal_key}] Request failed: {failure.request.url} — {failure.value}")
