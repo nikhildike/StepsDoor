@@ -205,7 +205,6 @@ interface SubscribedStore {
   logo?: string;
   website_url: string;
   store_locator_url?: string;
-  affiliate_network?: string;
   offers_links?: string; // newline-separated list of offer URLs
 }
 
