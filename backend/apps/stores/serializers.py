@@ -40,12 +40,15 @@ class StoreUpdateSerializer(serializers.ModelSerializer):
     Used by `MyStoreView` on PUT/PATCH. Deliberately excludes fields the
     owner shouldn't self-manage — `is_active` (admin-controlled visibility),
     verification IDs (gst/pan/aadhar, set at registration), `contact_email`,
-    and server-derived fields like `slug`/`has_active_subscription`.
+    server-derived fields like `slug`/`has_active_subscription`, and
+    `shopping_links`/`offers_links` which are admin-only fields set directly
+    via Django admin (these contain affiliate/offer links curated by StepsDoor,
+    not user-submitted content).
     """
     class Meta:
         model = Store
         fields = [
             'name', 'logo', 'store_type', 'category',
             'website_url', 'store_locator_url', 'affiliate_url',
-            'description', 'tagline', 'shopping_links', 'offers_links', 'contact_phone',
+            'description', 'tagline', 'contact_phone',
         ]

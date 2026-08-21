@@ -16,25 +16,15 @@ from core.affiliate import build_affiliate_url
 
 
 def _subscribed_store_qs(store_type):
-    """Return a queryset of active subscribed stores filtered by store_type.
+    """Return a queryset of publicly visible stores filtered by store_type.
 
-    Shared helper for the two public list views below. A store is only
-    "subscribed" (and therefore publicly visible) if its owning user has at
-    least one Subscription with status='active' and an end_date in the
-    future — checked via both the direct `Subscription.user` FK (store
-    owners) and `Subscription.company.user` FK (in case a company account
-    also owns a store), since either represents "this user is subscribed".
+    Shared helper for the two public list views below. Any store marked
+    `is_active=True` by the admin appears in the public directory — no
+    subscription check is applied here (first 3 months are free for all
+    registered stores; special offers / affiliate links are admin-only fields
+    set directly via Django admin, not by the store owner).
     """
-    from django.utils import timezone
-    from django.db.models import Q
-    from apps.subscriptions.models import Subscription
-    active_subs = Subscription.objects.filter(status='active', end_date__gt=timezone.now())
-    direct_user_ids  = active_subs.exclude(user=None).values_list('user_id', flat=True)
-    company_user_ids = active_subs.exclude(company=None).values_list('company__user_id', flat=True)
-    return Store.objects.filter(
-        is_active=True,
-        store_type=store_type,
-    ).filter(Q(user_id__in=direct_user_ids) | Q(user_id__in=company_user_ids))
+    return Store.objects.filter(is_active=True, store_type=store_type)
 
 
 class PublicStoreListView(generics.ListAPIView):
