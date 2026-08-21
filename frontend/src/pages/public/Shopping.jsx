@@ -376,16 +376,16 @@ function StoreGroup({ group }) {
 
 /**
  * A StepsDoor storefront-subscriber card (as opposed to a static directory
- * entry) — shows the store's logo/name/tagline. Clicking routes through a
- * click-tracking redirect.
+ * entry) — shows the store's logo/name/tagline. Clicking the main row routes
+ * through a click-tracking redirect. Any `shopping_links` set on the store
+ * are rendered as small link chips below the main row.
  * @param {{ store: object }} props - a subscribed store record from storeService.list()
  */
 function SubscribedStoreCard({ store }) {
   // Logs the click via storeService before opening the store's site, so click-through
   // analytics stay accurate even though we open the link ourselves. Falls back to the
   // raw website_url if the click-tracking call fails, so the click isn't lost.
-  const handleClick = useCallback(async (e) => {
-    e.preventDefault()
+  const handleClick = useCallback(async () => {
     try {
       const { data } = await storeService.click(store.id)
       window.open(data.redirect_url || store.website_url, '_blank', 'noopener,noreferrer')
@@ -394,28 +394,60 @@ function SubscribedStoreCard({ store }) {
     }
   }, [store.id, store.website_url])
 
+  // Parse newline-separated shopping_links into a clean URL array
+  const shoppingLinks = store.shopping_links
+    ? store.shopping_links.split('\n').map(l => l.trim()).filter(Boolean)
+    : []
+
   return (
-    <a
-      href={store.website_url}
-      onClick={handleClick}
-      className="flex items-center gap-3 p-3 bg-white border border-border rounded-xl hover:shadow-sm hover:border-primary/30 transition-all group cursor-pointer"
-    >
-      {store.logo ? (
-        <img src={store.logo} alt={store.name} className="h-10 w-10 rounded-lg object-cover shrink-0" />
-      ) : (
-        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <ShoppingBag className="h-5 w-5 text-primary" />
+    // Outer div so we can nest <a> chips for shopping_links without invalid HTML
+    <div className="bg-white border border-border rounded-xl hover:shadow-sm hover:border-primary/30 transition-all overflow-hidden">
+      {/* Main store row — clicking opens the store site via click-tracking */}
+      <div
+        onClick={handleClick}
+        className="flex items-center gap-3 p-3 cursor-pointer group"
+      >
+        {store.logo ? (
+          <img src={store.logo} alt={store.name} className="h-10 w-10 rounded-lg object-cover shrink-0" />
+        ) : (
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <ShoppingBag className="h-5 w-5 text-primary" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-1">
+            {store.name}
+            <BadgeCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+          </p>
+          {store.tagline && <p className="text-xs text-muted-foreground truncate">{store.tagline}</p>}
+        </div>
+        <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
+      </div>
+
+      {/* Shopping link chips — direct product/category links set by the store owner */}
+      {shoppingLinks.length > 0 && (
+        <div className="px-3 pb-3 flex flex-wrap gap-1.5">
+          {shoppingLinks.map((url, i) => {
+            // Show just the hostname as the chip label (e.g. "www.myntra.com" → "myntra.com")
+            let label = url
+            try { label = new URL(url).hostname.replace(/^www\./, '') } catch { /* keep raw url */ }
+            return (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()} // prevent bubbling to the parent div's handleClick
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/8 text-primary text-[11px] font-medium hover:bg-primary/15 transition-colors border border-primary/20"
+              >
+                <LinkIcon className="h-2.5 w-2.5 shrink-0" />
+                {label}
+              </a>
+            )
+          })}
         </div>
       )}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-1">
-          {store.name}
-          <BadgeCheck className="h-3.5 w-3.5 text-primary shrink-0" />
-        </p>
-        {store.tagline && <p className="text-xs text-muted-foreground truncate">{store.tagline}</p>}
-      </div>
-      <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
-    </a>
+    </div>
   )
 }
 

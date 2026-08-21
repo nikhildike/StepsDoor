@@ -292,9 +292,9 @@ function RetailGroup({ group }) {
 
 /**
  * A StepsDoor storefront-subscriber card (as opposed to a static directory
- * entry) — shows the store's logo/name/tagline and an affiliate badge if
- * applicable, plus an optional "Find Store" locator link. Visiting the
- * website goes through a click-tracking redirect.
+ * entry) — shows the store's logo/name/tagline, optional "Find Store" locator
+ * link, and any `shopping_links` set by the store owner as clickable chips.
+ * Visiting the website goes through a click-tracking redirect.
  * @param {{ store: object }} props - a subscribed store record from storeService.listRetail()
  */
 function SubscribedRetailCard({ store }) {
@@ -312,36 +312,67 @@ function SubscribedRetailCard({ store }) {
     }
   }, [store.id, store.website_url])
 
+  // Parse newline-separated shopping_links into a clean URL array
+  const shoppingLinks = store.shopping_links
+    ? store.shopping_links.split('\n').map(l => l.trim()).filter(Boolean)
+    : []
+
   return (
-    <div className="flex items-center gap-3 p-3 bg-white border border-border rounded-xl hover:shadow-sm transition-shadow">
-      {store.logo ? (
-        <img src={store.logo} alt={store.name} className="h-10 w-10 rounded-lg object-cover shrink-0" />
-      ) : (
-        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <Store className="h-5 w-5 text-primary" />
+    <div className="bg-white border border-border rounded-xl hover:shadow-sm transition-shadow overflow-hidden">
+      {/* Main store row */}
+      <div className="flex items-center gap-3 p-3">
+        {store.logo ? (
+          <img src={store.logo} alt={store.name} className="h-10 w-10 rounded-lg object-cover shrink-0" />
+        ) : (
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+            <Store className="h-5 w-5 text-primary" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-foreground flex items-center gap-1">
+            {store.name}
+            <BadgeCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+          </p>
+          {store.tagline && <p className="text-xs text-muted-foreground truncate">{store.tagline}</p>}
+        </div>
+        <div className="flex gap-1.5 shrink-0">
+          {store.store_locator_url && (
+            <a href={store.store_locator_url} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
+            >
+              <MapPin className="h-3 w-3" /> Find Store
+            </a>
+          )}
+          <a href={store.website_url} onClick={handleVisitClick}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      </div>
+
+      {/* Shopping link chips — direct product/category links set by the store owner */}
+      {shoppingLinks.length > 0 && (
+        <div className="px-3 pb-3 flex flex-wrap gap-1.5">
+          {shoppingLinks.map((url, i) => {
+            // Show just the hostname as the chip label (e.g. "www.tanishq.co.in" → "tanishq.co.in")
+            let label = url
+            try { label = new URL(url).hostname.replace(/^www\./, '') } catch { /* keep raw url */ }
+            return (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/8 text-primary text-[11px] font-medium hover:bg-primary/15 transition-colors border border-primary/20"
+              >
+                <LinkIcon className="h-2.5 w-2.5 shrink-0" />
+                {label}
+              </a>
+            )
+          })}
         </div>
       )}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-foreground flex items-center gap-1">
-          {store.name}
-          <BadgeCheck className="h-3.5 w-3.5 text-primary shrink-0" />
-        </p>
-        {store.tagline && <p className="text-xs text-muted-foreground truncate">{store.tagline}</p>}
-      </div>
-      <div className="flex gap-1.5 shrink-0">
-        {store.store_locator_url && (
-          <a href={store.store_locator_url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
-          >
-            <MapPin className="h-3 w-3" /> Find Store
-          </a>
-        )}
-        <a href={store.website_url} onClick={handleVisitClick}
-          className="p-1.5 rounded-md text-muted-foreground hover:text-primary transition-colors cursor-pointer"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-        </a>
-      </div>
     </div>
   )
 }
