@@ -321,83 +321,14 @@ const totalStores = SHOPPING_GROUPS.reduce((s, g) => s + g.stores.length, 0)
 // Every store, flattened with its group's colour attached — used for search
 export const ALL_STORES = SHOPPING_GROUPS.flatMap(g => g.stores.map(s => ({ ...s, groupLabel: g.label, groupColor: g.color })))
 
-// ---------------------------------------------------------------------------
-// Affiliate network badges
-// ---------------------------------------------------------------------------
-
-// Label + style for each affiliate network a store card can be tagged with
-const AFFILIATE_BADGE = {
-  amazon:   { label: 'Amazon Associates', cls: 'bg-orange-100 text-orange-700 border-orange-200' },
-  cuelinks: { label: 'Cuelinks',          cls: 'bg-blue-100 text-blue-700 border-blue-200'       },
-  earnkaro: { label: 'EarnKaro',          cls: 'bg-green-100 text-green-700 border-green-200'    },
-}
-
-// Maps static store names to their affiliate network.
-// Detected at runtime — no need to touch individual store data entries.
-const STATIC_AFFILIATE_MAP = {
-  // Amazon Associates
-  'Amazon India': 'amazon', 'Amazon Books': 'amazon',
-
-  // Cuelinks — major Indian e-commerce merchants confirmed in their network
-  'Flipkart': 'cuelinks', 'Meesho': 'cuelinks', 'Snapdeal': 'cuelinks',
-  'JioMart': 'cuelinks', 'JioMart Groceries': 'cuelinks', 'Tata CLiQ': 'cuelinks',
-  'Myntra': 'cuelinks', 'AJIO': 'cuelinks', 'Nykaa Fashion': 'cuelinks',
-  'Bewakoof': 'cuelinks', 'The Souled Store': 'cuelinks', 'Snitch': 'cuelinks',
-  'Max Fashion': 'cuelinks', 'Pantaloons': 'cuelinks', 'Fabindia': 'cuelinks',
-  'Libas': 'cuelinks', 'BIBA': 'cuelinks', 'Limeroad': 'cuelinks',
-  'Bata India': 'cuelinks', 'Metro Shoes': 'cuelinks', 'Campus Shoes': 'cuelinks',
-  'Red Tape': 'cuelinks',
-  'Croma': 'cuelinks', 'Vijay Sales': 'cuelinks',
-  'boAt': 'cuelinks', 'Noise': 'cuelinks', 'Fire-Boltt': 'cuelinks',
-  'BigBasket': 'cuelinks', 'Licious': 'cuelinks', 'FreshToHome': 'cuelinks',
-  'Country Delight': 'cuelinks',
-  'Nykaa': 'cuelinks', 'Purplle': 'cuelinks', 'Tira Beauty': 'cuelinks',
-  'Mamaearth': 'cuelinks', 'SUGAR Cosmetics': 'cuelinks',
-  'The Minimalist': 'cuelinks', 'Plum Goodness': 'cuelinks',
-  'mCaffeine': 'cuelinks', 'WOW Skin Science': 'cuelinks',
-  'PharmEasy': 'cuelinks', '1mg (Tata)': 'cuelinks', 'Netmeds': 'cuelinks',
-  'Truemeds': 'cuelinks', 'HealthKart': 'cuelinks', 'MuscleBlaze': 'cuelinks',
-  'Pepperfry': 'cuelinks', 'Urban Ladder': 'cuelinks', 'Wooden Street': 'cuelinks',
-  'Wakefit': 'cuelinks', 'Sleepycat': 'cuelinks', 'Nestasia': 'cuelinks',
-  'CaratLane': 'cuelinks', 'BlueStone': 'cuelinks', 'GIVA': 'cuelinks',
-  'Melorra': 'cuelinks',
-  'Flipkart Books': 'cuelinks', 'BooksWagon': 'cuelinks', 'Crossword': 'cuelinks',
-  'FirstCry': 'cuelinks', 'Hopscotch': 'cuelinks', 'BabyHug': 'cuelinks',
-  'Decathlon India': 'cuelinks', 'Nike India': 'cuelinks',
-  'Adidas India': 'cuelinks', 'Puma India': 'cuelinks', 'Cult Sport': 'cuelinks',
-  'Lenskart': 'cuelinks', 'Titan Eye+': 'cuelinks',
-  'Titan Watches': 'cuelinks', 'Fastrack': 'cuelinks', 'Helios': 'cuelinks',
-  'Cashify': 'cuelinks', 'Cars24': 'cuelinks',
-  'Safari Industries': 'cuelinks', 'American Tourister': 'cuelinks',
-  'VIP Bags': 'cuelinks', 'Wildcraft': 'cuelinks', 'Mokobara': 'cuelinks',
-  'iHerb': 'cuelinks',
-}
-
-/**
- * Small pill showing which affiliate network a store's outbound link is
- * tracked through. Renders nothing if the network isn't recognised.
- * @param {{ network: string }} props - affiliate network key (must match an AFFILIATE_BADGE entry)
- */
-function AffiliateBadge({ network }) {
-  const b = AFFILIATE_BADGE[network]
-  if (!b) return null
-  return (
-    <span className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded border font-medium leading-none ${b.cls}`}>
-      {b.label}
-    </span>
-  )
-}
-
 /**
  * One static-directory store: an outbound link card (routed through
- * affiliateUrl() for Amazon tagging) with name, optional tag badge, an
- * affiliate-network badge when the store is in STATIC_AFFILIATE_MAP, and
+ * affiliateUrl() for Amazon tagging) with name, optional tag badge, and
  * description.
  * @param {{ store: object, color: string }} props - store entry from SHOPPING_GROUPS and its group's color key
  */
 function StoreCard({ store, color }) {
   const c = COLOR_MAP[color]
-  const network = STATIC_AFFILIATE_MAP[store.name]
   return (
     <a
       href={affiliateUrl(store.url)}
@@ -413,11 +344,6 @@ function StoreCard({ store, color }) {
           )}
         </div>
         <p className="text-xs text-muted-foreground leading-snug">{store.desc}</p>
-        {network && (
-          <div className="mt-1.5">
-            <AffiliateBadge network={network} />
-          </div>
-        )}
       </div>
       <ExternalLink className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary shrink-0 mt-0.5 transition-colors" />
     </a>
@@ -450,8 +376,8 @@ function StoreGroup({ group }) {
 
 /**
  * A StepsDoor storefront-subscriber card (as opposed to a static directory
- * entry) — shows the store's logo/name/tagline and an affiliate badge if
- * applicable. Clicking routes through a click-tracking redirect.
+ * entry) — shows the store's logo/name/tagline. Clicking routes through a
+ * click-tracking redirect.
  * @param {{ store: object }} props - a subscribed store record from storeService.list()
  */
 function SubscribedStoreCard({ store }) {
@@ -487,11 +413,6 @@ function SubscribedStoreCard({ store }) {
           <BadgeCheck className="h-3.5 w-3.5 text-primary shrink-0" />
         </p>
         {store.tagline && <p className="text-xs text-muted-foreground truncate">{store.tagline}</p>}
-        {store.affiliate_network && (
-          <div className="mt-1">
-            <AffiliateBadge network={store.affiliate_network} />
-          </div>
-        )}
       </div>
       <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
     </a>

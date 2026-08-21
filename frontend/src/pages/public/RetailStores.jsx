@@ -15,28 +15,6 @@ import { ExternalLink, Store, ShoppingCart, Shirt, Smartphone, Gem, Pill, BookOp
 import { Link } from 'react-router-dom'
 import { storeService } from '@/services/storeService'
 
-// Label + style for each affiliate network a subscribed store can be tagged with
-const AFFILIATE_BADGE = {
-  amazon:   { label: 'Amazon Associates', cls: 'bg-orange-100 text-orange-700 border-orange-200' },
-  cuelinks: { label: 'Cuelinks',          cls: 'bg-blue-100 text-blue-700 border-blue-200'       },
-  earnkaro: { label: 'EarnKaro',          cls: 'bg-green-100 text-green-700 border-green-200'    },
-}
-
-/**
- * Small pill showing which affiliate network a subscribed store's outbound
- * link is tracked through. Renders nothing if the network isn't recognised.
- * @param {{ network: string }} props - affiliate network key (must match a AFFILIATE_BADGE entry)
- */
-function AffiliateBadge({ network }) {
-  const b = AFFILIATE_BADGE[network]
-  if (!b) return null
-  return (
-    <span className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded border font-medium leading-none ${b.cls}`}>
-      {b.label}
-    </span>
-  )
-}
-
 // Static directory data: one entry per category, each holding its icon, accent
 // color, and the list of chains shown as plain outbound link cards. This is
 // hand-maintained content, not fetched from the backend.
@@ -349,11 +327,6 @@ function SubscribedRetailCard({ store }) {
           <BadgeCheck className="h-3.5 w-3.5 text-primary shrink-0" />
         </p>
         {store.tagline && <p className="text-xs text-muted-foreground truncate">{store.tagline}</p>}
-        {store.affiliate_network && (
-          <div className="mt-1">
-            <AffiliateBadge network={store.affiliate_network} />
-          </div>
-        )}
       </div>
       <div className="flex gap-1.5 shrink-0">
         {store.store_locator_url && (
