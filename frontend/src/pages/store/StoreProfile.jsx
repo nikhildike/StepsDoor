@@ -59,7 +59,7 @@ const RETAIL_CATEGORIES = [
 // - name/category/website_url: required.
 // - store_locator_url: optional, but if provided must be a valid URL (empty string allowed).
 // - tagline: optional, capped at 255 chars.
-// - description/contact_phone: optional free text.
+// - description/contact_phone/shopping_links/offers_links: optional free text.
 const schema = z.object({
   name:              z.string().min(2, 'Store name is required'),
   category:          z.string().min(1, 'Select a category'),
@@ -68,6 +68,8 @@ const schema = z.object({
   tagline:           z.string().max(255).optional(),
   description:       z.string().optional(),
   contact_phone:     z.string().optional(),
+  shopping_links:    z.string().optional(), // one URL per line, shown on the shopping directory
+  offers_links:      z.string().optional(), // one URL per line, shown in the Special Offers modal
 })
 
 /**
@@ -103,6 +105,8 @@ export default function StoreProfile() {
         tagline:           data.tagline           || '',
         description:       data.description       || '',
         contact_phone:     data.contact_phone     || '',
+        shopping_links:    data.shopping_links    || '',
+        offers_links:      data.offers_links      || '',
       })
     }).catch(() => {})
   }, [reset])
@@ -206,6 +210,38 @@ export default function StoreProfile() {
         <div>
           <label className="text-sm font-medium">Contact Phone <span className="text-muted-foreground text-xs">(optional)</span></label>
           <Input {...register('contact_phone')} placeholder="+91 98765 43210" className="mt-1" />
+        </div>
+
+        {/* shopping_links: direct product/category links shown on the shopping directory alongside the store card. */}
+        <div>
+          <label className="text-sm font-medium">
+            Shopping Links <span className="text-muted-foreground text-xs">(optional — one URL per line)</span>
+          </label>
+          <textarea
+            {...register('shopping_links')}
+            rows={4}
+            placeholder={"https://mystore.com/shoes\nhttps://mystore.com/sale"}
+            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none font-mono"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Direct product or category links shown on the {storeType === 'retail' ? 'Retail Stores' : 'Shopping'} directory.
+          </p>
+        </div>
+
+        {/* offers_links: deal/sale/coupon URLs shown in the Special Offers modal on the shopping pages. */}
+        <div>
+          <label className="text-sm font-medium">
+            Offers Links <span className="text-muted-foreground text-xs">(optional — one URL per line)</span>
+          </label>
+          <textarea
+            {...register('offers_links')}
+            rows={4}
+            placeholder={"https://mystore.com/sale\nhttps://mystore.com/coupon"}
+            className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none font-mono"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Deal, sale, or coupon links shown in the Special Offers pop-up on the shopping pages.
+          </p>
         </div>
 
         <Button type="submit" disabled={isSubmitting}>
