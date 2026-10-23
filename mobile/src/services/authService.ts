@@ -37,4 +37,13 @@ export const authService = {
    *   signed-in user's profile (e.g. on app resume).
    */
   me: () => api.get('/auth/me/'),
+  /**
+   * Changes the signed-in user's password. Shared across every account role
+   * since they all hit the same backend endpoint.
+   * @param data - `{ old_password, new_password }`.
+   * @returns Axios response (success detail message).
+   * @remarks Used by the Settings screen's Change Password section.
+   */
+  changePassword: (data: { old_password: string; new_password: string }) =>
+    api.post('/auth/change-password/', data),
 };

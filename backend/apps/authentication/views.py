@@ -15,9 +15,10 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
 
 from .models import EmailOTP
-from .serializers import RegisterSerializer, UserSerializer
+from .serializers import RegisterSerializer, UserSerializer, ChangePasswordSerializer
 
 User = get_user_model()
 
@@ -162,3 +163,41 @@ class MeView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         """Return the requesting user themself rather than looking one up by URL pk, since `MeView` always operates on `request.user`. Called by DRF's `RetrieveUpdateAPIView` for both GET and PATCH `/api/auth/me/`."""
         return self.request.user
+
+
+class ChangePasswordView(APIView):
+    """
+    Change the authenticated user's password. Works identically for every
+    account role (job seeker, company, store owner, contractor) since they
+    all share the same `User` model and JWT session — there is no per-role
+    branching needed here, unlike the role-specific flows in RegisterSerializer.
+    """
+    permission_classes = [permissions.IsAuthenticated]  # Must already be logged in — this is not a "forgot password" flow
+
+    def post(self, request):
+        """Validate old/new password, persist the change, and blacklist the
+        user's other outstanding refresh tokens so other signed-in
+        sessions/devices can no longer silently refresh their way back in.
+        Called on POST `/api/auth/change-password/` from any logged-in
+        account's profile/settings screen.
+        """
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+
+        # Blacklist every refresh token issued to this user that isn't
+        # blacklisted yet. Only catches tokens issued since token_blacklist
+        # was added to INSTALLED_APPS (OutstandingToken rows are created at
+        # issuance time by simplejwt's BlacklistMixin, so older tokens were
+        # never recorded). Already-issued access tokens are unaffected and
+        # remain valid until they naturally expire (ACCESS_TOKEN_LIFETIME) —
+        # only the refresh step is blocked.
+        outstanding = OutstandingToken.objects.filter(user=user).exclude(
+            blacklistedtoken__isnull=False
+        )
+        BlacklistedToken.objects.bulk_create(
+            [BlacklistedToken(token=token) for token in outstanding]
+        )
+
+        return Response({'detail': 'Password changed successfully.'})
+

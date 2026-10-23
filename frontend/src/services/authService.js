@@ -73,4 +73,16 @@ export const authService = {
    * for any explicit/manual refresh call sites.
    */
   refresh: (refresh) => api.post('/auth/refresh/', { refresh }),
+
+  /**
+   * Changes the logged-in user's password. Works for every account role
+   * (job seeker, company, store owner) since they all hit the same shared
+   * endpoint — no role-specific service method needed.
+   *
+   * Endpoint: POST /auth/change-password/
+   * @param {Object} data - { old_password, new_password }.
+   * @returns {Promise} Axios response promise.
+   * Used by: `components/account/ChangePasswordForm.jsx`.
+   */
+  changePassword: (data) => api.post('/auth/change-password/', data),
 }

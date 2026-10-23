@@ -17,4 +17,6 @@ urlpatterns = [
     path('verify-otp/', views.VerifyOTPView.as_view(), name='verify_otp'),
     # GET/PATCH — retrieve or update the logged-in user's own profile. Requires authentication (any role).
     path('me/', views.MeView.as_view(), name='me'),
+    # POST — change the logged-in user's password (old + new). Requires authentication (any role).
+    path('change-password/', views.ChangePasswordView.as_view(), name='change_password'),
 ]

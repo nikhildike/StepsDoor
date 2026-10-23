@@ -16,6 +16,7 @@ import { Link2, Copy, Check, ExternalLink } from 'lucide-react'
 import { companyService } from '@/services/companyService'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { ChangePasswordForm } from '@/components/account/ChangePasswordForm'
 
 // Zod validation schema for the company profile form.
 // - name/contact_email: required.
@@ -159,6 +160,8 @@ export default function CompanyProfile() {
           </Button>
         </div>
       </form>
+
+      <ChangePasswordForm />
     </div>
   )
 }

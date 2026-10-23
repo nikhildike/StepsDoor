@@ -11,6 +11,7 @@ from django.contrib.auth import get_user_model
 from django.core import signing
 from django.db import transaction
 from rest_framework import serializers
+from django.contrib.auth.password_validation import validate_password
 
 User = get_user_model()
 
@@ -188,4 +189,35 @@ class RegisterSerializer(serializers.ModelSerializer):
             from apps.jobseekers.models import JobSeeker  # Local import avoids a circular import between the authentication and jobseekers apps
             JobSeeker.objects.create(user=user)
 
+        return user
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """
+    Validates a password-change request for the currently authenticated user
+    (`ChangePasswordView`, POST `/api/auth/change-password/`). Works for every
+    account role (job seeker, company, store owner, contractor) since they all
+    share the same `User` model — there is no role-specific logic here.
+    """
+    old_password = serializers.CharField(write_only=True)  # Current password, checked against request.user before allowing the change
+    new_password = serializers.CharField(write_only=True, min_length=8)  # New plaintext password; run through Django's AUTH_PASSWORD_VALIDATORS below
+
+    def validate_old_password(self, value):
+        """Rejects the request if `old_password` doesn't match the authenticated user's current password."""
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError('Current password is incorrect.')
+        return value
+
+    def validate_new_password(self, value):
+        """Runs the new password through Django's configured AUTH_PASSWORD_VALIDATORS (min length, similarity to user attributes, common-password check, etc.)."""
+        user = self.context['request'].user
+        validate_password(value, user=user)
+        return value
+
+    def save(self):
+        """Hashes and persists the new password onto the authenticated user. Called by `ChangePasswordView.post()` after `is_valid()` passes."""
+        user = self.context['request'].user
+        user.set_password(self.validated_data['new_password'])
+        user.save(update_fields=['password'])
         return user

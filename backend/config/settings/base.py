@@ -58,10 +58,15 @@ DJANGO_APPS = [
 #     match_tender_alerts) editable from Django admin
 #   drf_spectacular — OpenAPI schema generation for /api/docs/ and /api/redoc/
 #   import_export — admin import/export (e.g. bulk-managing scraped data)
+#   rest_framework_simplejwt.token_blacklist — tracks issued refresh tokens
+#     (OutstandingToken) and lets specific ones be blacklisted; used by
+#     ChangePasswordView to invalidate a user's other sessions' refresh
+#     tokens when their password changes (see apps.authentication.views)
 THIRD_PARTY_APPS = [
     'django.contrib.postgres',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'django_filters',
     'django_celery_beat',
@@ -259,10 +264,12 @@ SPECTACULAR_SETTINGS = {
 # week so users aren't forced to re-login constantly. ROTATE_REFRESH_TOKENS
 # issues a new refresh token on every refresh (paired with the web
 # frontend's Axios interceptor auto-refresh-on-401 behaviour), but
-# BLACKLIST_AFTER_ROTATION is off so old refresh tokens aren't invalidated
-# (the blacklist app isn't installed) — acceptable tradeoff for this app's
-# threat model. SIGNING_KEY reuses Django's SECRET_KEY rather than a
-# separate key.
+# BLACKLIST_AFTER_ROTATION is off so a rotated-out refresh token isn't
+# auto-blacklisted — acceptable tradeoff for this app's threat model. The
+# `token_blacklist` app is installed (see THIRD_PARTY_APPS) purely so
+# ChangePasswordView can explicitly blacklist a user's outstanding refresh
+# tokens when their password changes; it isn't otherwise wired into normal
+# rotation. SIGNING_KEY reuses Django's SECRET_KEY rather than a separate key.
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),

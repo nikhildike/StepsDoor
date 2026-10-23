@@ -16,6 +16,7 @@ import { z } from 'zod'
 import { storeService } from '@/services/storeService'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { ChangePasswordForm } from '@/components/account/ChangePasswordForm'
 
 // Category options shown when the store's type is "online" (e-commerce / D2C brands).
 const ONLINE_CATEGORIES = [
@@ -213,6 +214,8 @@ export default function StoreProfile() {
           {isSubmitting ? 'Saving...' : 'Save Changes'}
         </Button>
       </form>
+
+      <ChangePasswordForm />
     </div>
   )
 }

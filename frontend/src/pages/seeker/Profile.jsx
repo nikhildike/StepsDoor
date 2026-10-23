@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { seekerService } from '@/services/seekerService'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { ChangePasswordForm } from '@/components/account/ChangePasswordForm'
 
 // Zod validation schema for the seeker profile form: only first_name is required.
 const schema = z.object({
@@ -102,6 +103,8 @@ export default function SeekerProfile() {
           </Button>
         </div>
       </form>
+
+      <ChangePasswordForm />
     </div>
   )
 }
