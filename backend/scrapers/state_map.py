@@ -48,7 +48,6 @@ PORTAL_STATE_MAP = {
     'hmwssb.gov.in':             'Telangana',
     'tsgenco.telangana.gov.in':  'Telangana',
     'tsnpdcl.in':                'Telangana',
-    'tsecl.in':                  'Telangana',
 
     # ── Karnataka ─────────────────────────────────────────────────────────────
     'keonics.in':                'Karnataka',
@@ -62,6 +61,7 @@ PORTAL_STATE_MAP = {
     'karnataka.gov.in':          'Karnataka',
 
     # ── Gujarat ───────────────────────────────────────────────────────────────
+    'gujaratinformation.gujarat.gov.in': 'Gujarat',
     'suratmunicipal.gov.in':     'Gujarat',
     'vmc.gov.in':                'Gujarat',
     'gmdc.com':                  'Gujarat',
@@ -72,6 +72,7 @@ PORTAL_STATE_MAP = {
     'dgvcl.com':                 'Gujarat',
     'ugvcl.com':                 'Gujarat',
     'gujarattenders.gov.in':     'Gujarat',
+    'tender.nprocure.com':       'Gujarat',   # nProcure — Gujarat's official state e-tender portal
     'amcindore.org':             'Gujarat',
 
     # ── Uttar Pradesh ─────────────────────────────────────────────────────────
@@ -103,7 +104,7 @@ PORTAL_STATE_MAP = {
     'mptransco.in':              'Madhya Pradesh',
 
     # ── Bihar ─────────────────────────────────────────────────────────────────
-    'tender.bihar.gov.in':       'Bihar',
+    'eproc2.bihar.gov.in':       'Bihar',
     'bsphcl.bih.nic.in':        'Bihar',
     'bseb.co.in':                'Bihar',
     'biharurban.gov.in':         'Bihar',
@@ -161,10 +162,10 @@ PORTAL_STATE_MAP = {
 
     # ── Tripura ───────────────────────────────────────────────────────────────
     'tripuratenders.gov.in':     'Tripura',
-    'tsecl.in':                  'Tripura',
+    'tsecl.in':                  'Tripura',   # Tripura State Electricity Corp (not Telangana)
 
     # ── Goa ───────────────────────────────────────────────────────────────────
-    'goatenders.gov.in':         'Goa',
+    'eprocure.goa.gov.in':        'Goa',
     'goaelectricity.gov.in':     'Goa',
 
     # ── Manipur ───────────────────────────────────────────────────────────────
@@ -280,7 +281,6 @@ PORTAL_STATE_MAP = {
     'ncs.gov.in':                'Central Govt',
     'nic.in':                    'Central Govt',
     'meity.gov.in':              'Central Govt',
-    'tender.nprocure.com':       'Central Govt',
     'defence.gov.in':            'Central Govt',
     'drdo.gov.in':               'Central Govt',
     'isro.gov.in':               'Central Govt',
