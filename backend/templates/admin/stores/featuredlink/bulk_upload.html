@@ -1,0 +1,80 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Bulk Upload Featured Links{% endblock %}
+
+{% block content %}
+<h1>Bulk Upload Featured Links</h1>
+
+<p style="color:#555; margin-bottom:1rem;">
+  Upload an Excel (.xlsx) file to create multiple Featured Links at once.
+</p>
+
+<div style="background:#e8f4f8; border:1px solid #b8d9e8; padding:1rem 1.25rem; border-radius:4px; margin-bottom:1.5rem; font-size:0.875rem;">
+  <strong>Required columns:</strong> <code>url</code>, <code>label</code>
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  <strong>Optional columns:</strong> <code>description</code>, <code>link_type</code>, <code>page</code>
+  <br style="margin-bottom:0.4rem;">
+  The first row must be a header row. If <code>link_type</code> or <code>page</code> are blank or missing,
+  the defaults selected below are used for that row.
+  <br style="margin-bottom:0.6rem;">
+  <a href="example/" style="font-weight:bold; color:#417690;">
+    ⬇ Download example .xlsx file
+  </a>
+</div>
+
+{% if results %}
+  <div style="background:{% if results.errors %}#fff3cd{% else %}#d4edda{% endif %};
+              border:1px solid {% if results.errors %}#ffc107{% else %}#c3e6cb{% endif %};
+              padding:1rem 1.25rem; border-radius:4px; margin-bottom:1.5rem; font-size:0.875rem;">
+    <strong>Upload complete:</strong>
+    {{ results.created }} link(s) created{% if results.skipped %}, {{ results.skipped }} row(s) skipped{% endif %}.
+    {% if results.errors %}
+      <ul style="margin:0.5rem 0 0; padding-left:1.2rem;">
+        {% for err in results.errors %}
+          <li>{{ err }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" style="max-width:520px;">
+  {% csrf_token %}
+
+  <div style="margin-bottom:1.25rem;">
+    <label style="display:block; font-weight:bold; margin-bottom:0.25rem;">Excel File (.xlsx) *</label>
+    <input type="file" name="xlsx_file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required style="font-size:0.9rem;">
+    <p style="color:#666; font-size:0.8rem; margin:0.3rem 0 0;">
+      First row must be a header row. Download the example above to get started.
+    </p>
+  </div>
+
+  <div style="margin-bottom:1.25rem;">
+    <label style="display:block; font-weight:bold; margin-bottom:0.25rem;">Default Link Type</label>
+    <select name="default_link_type" style="font-size:0.9rem; padding:0.3rem 0.5rem; min-width:180px;">
+      <option value="offer">Offer / Deal</option>
+      <option value="shopping">Shopping Link</option>
+    </select>
+    <p style="color:#666; font-size:0.8rem; margin:0.3rem 0 0;">
+      Used when a row's <code>link_type</code> cell is blank or invalid.
+    </p>
+  </div>
+
+  <div style="margin-bottom:1.75rem;">
+    <label style="display:block; font-weight:bold; margin-bottom:0.25rem;">Default Show On Page</label>
+    <select name="default_page" style="font-size:0.9rem; padding:0.3rem 0.5rem; min-width:180px;">
+      <option value="both">Both pages</option>
+      <option value="shopping">Shopping page only</option>
+      <option value="retail">Retail Stores page only</option>
+    </select>
+    <p style="color:#666; font-size:0.8rem; margin:0.3rem 0 0;">
+      Used when a row's <code>page</code> cell is blank or invalid.
+    </p>
+  </div>
+
+  <div>
+    <input type="submit" value="Upload" class="default" style="margin-right:0.75rem;">
+    <a href="../" style="font-size:0.9rem; color:#666;">Cancel</a>
+  </div>
+</form>
+{% endblock %}

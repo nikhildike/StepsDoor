@@ -6,6 +6,10 @@ job postings. Store owners register a Store, subscribe to a plan (see
 `apps.subscriptions`), and — once their subscription is active — appear in
 the public listings so job seekers can click through to shop, generating
 affiliate revenue for StepsDoor.
+
+`FeaturedLink` is a separate admin-only model for pasting standalone offer or
+shopping links that do not belong to any registered Store — e.g. a direct
+Flipkart sale page or a coupon landing page that StepsDoor promotes directly.
 """
 from django.db import models
 from django.utils.text import slugify
@@ -188,3 +192,77 @@ class Store(models.Model):
             status='active',
             end_date__gt=timezone.now(),
         ).exists()
+
+
+# ---------------------------------------------------------------------------
+# FeaturedLink — standalone admin-curated offer/shopping links
+# ---------------------------------------------------------------------------
+
+# Which public page(s) a FeaturedLink should appear on.
+FEATURED_LINK_PAGE_CHOICES = [
+    ('shopping', 'Shopping page'),
+    ('retail',   'Retail Stores page'),
+    ('both',     'Both pages'),
+]
+
+# Whether the link is an offer/deal or a direct shopping/product link.
+FEATURED_LINK_TYPE_CHOICES = [
+    ('offer',    'Offer / Deal'),
+    ('shopping', 'Shopping Link'),
+]
+
+
+class FeaturedLink(models.Model):
+    """An admin-curated standalone link shown on the public Shopping or Retail Stores page.
+
+    Unlike `Store`, a FeaturedLink has no registered user behind it — it is
+    created entirely by StepsDoor staff via Django admin to promote deals,
+    sale pages, coupon landings, or product-category links without requiring
+    the merchant to have a Store account.
+
+    Offer-type links feed into the "Special Offers" modal on the relevant
+    page(s); shopping-type links appear as chips in the shopping directory.
+    """
+    url   = models.URLField(help_text='Full destination URL (can be an affiliate link).')
+    label = models.CharField(
+        max_length=120,
+        help_text='Short display label shown as the chip or offer card title (e.g. "Myntra EORS Sale").',
+    )
+    # Optional: an image/logo to show alongside the link in the UI.
+    logo  = models.ImageField(upload_to='featured_link_logos/', blank=True, null=True)
+
+    # Determines visual treatment — offer links go into the Special Offers modal;
+    # shopping links appear as inline chips on the page.
+    link_type = models.CharField(
+        max_length=10,
+        choices=FEATURED_LINK_TYPE_CHOICES,
+        default='offer',
+        verbose_name='Link type',
+    )
+    # Which public page(s) this link should appear on.
+    page = models.CharField(
+        max_length=10,
+        choices=FEATURED_LINK_PAGE_CHOICES,
+        default='both',
+        verbose_name='Show on page',
+    )
+    # Short description shown below the label in the offer card (e.g. "Flat 40% off sitewide, use code SAVE40"). Optional.
+    description = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text='Optional short description shown on the offer card (e.g. "Flat 40% off, use code SAVE40"). Max 255 chars.',
+    )
+    # Admin visibility toggle — set to False to hide without deleting.
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Featured Link'
+        verbose_name_plural = 'Featured Links'
+        ordering = ['-created_at']  # newest first in admin
+
+    def __str__(self):
+        """Return the label — used in Django admin list views and shell repr."""
+        return self.label

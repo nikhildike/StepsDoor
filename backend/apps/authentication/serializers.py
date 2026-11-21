@@ -3,8 +3,8 @@
 `UserSerializer` shapes the current user for read/update responses (used by
 `MeView` and nested into login/register responses); `RegisterSerializer`
 drives the multi-step signup flow, validating role-specific fields and
-fanning out to create the related `Company`, `Store`, or `JobSeeker` record
-that goes with a new account.
+fanning out to create the related `Company`, `Store`, `JobSeeker`, or
+`ContractorProfile` record that goes with a new account.
 """
 import uuid
 from django.contrib.auth import get_user_model
@@ -26,7 +26,8 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name',
-                  'phone', 'is_company', 'is_job_seeker', 'is_store_owner', 'created_at']
+                  'phone', 'is_company', 'is_job_seeker', 'is_store_owner',
+                  'is_contractor', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 
@@ -35,38 +36,46 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     Accepts a common set of fields plus write-only, role-conditional field
     groups: company fields (name + at least one of GSTIN/PAN/Aadhar) used
-    when `is_company` is set, and store fields used when `is_store_owner`
-    is set. Requires a valid `email_verified_token` (issued by
-    `VerifyOTPView` after OTP verification) so an account can't be created
-    for an email the requester doesn't control.
+    when `is_company` is set; store fields used when `is_store_owner` is set;
+    and contractor fields used when `is_contractor` is set. Requires a valid
+    `email_verified_token` (issued by `VerifyOTPView` after OTP verification)
+    so an account can't be created for an email the requester doesn't control.
     """
     password = serializers.CharField(write_only=True, min_length=8)  # Plain-text password from the client; never serialized back out, hashed in create()
     email_verified_token = serializers.CharField(write_only=True)  # Signed token from VerifyOTPView proving the email was OTP-verified; consumed (not stored) in validate()
 
     # Company-only fields
     company_name = serializers.CharField(required=False, allow_blank=True, write_only=True)
-    gstin = serializers.CharField(required=False, allow_blank=True, write_only=True, max_length=15)
-    pan_number = serializers.CharField(required=False, allow_blank=True, write_only=True, max_length=10)
-    aadhar_number = serializers.CharField(required=False, allow_blank=True, write_only=True, max_length=12)
+
+    # Shared verification ID fields — used by company, store, and contractor roles
+    gstin = serializers.CharField(required=False, allow_blank=True, write_only=True, max_length=15)  # 15-char GST Identification Number
+    pan_number = serializers.CharField(required=False, allow_blank=True, write_only=True, max_length=10)  # 10-char Permanent Account Number
+    aadhar_number = serializers.CharField(required=False, allow_blank=True, write_only=True, max_length=12)  # 12-digit Aadhar UID
 
     # Store-owner-only fields
     store_name = serializers.CharField(required=False, allow_blank=True, write_only=True)
-    store_type = serializers.CharField(required=False, allow_blank=True, write_only=True)   # 'online' | 'retail'
+    store_type = serializers.CharField(required=False, allow_blank=True, write_only=True)   # 'online' | 'retail' — chosen via the inline toggle on the Store registration form
     store_category = serializers.CharField(required=False, allow_blank=True, write_only=True)
     store_url = serializers.URLField(required=False, allow_blank=True, write_only=True)
-    store_locator_url = serializers.URLField(required=False, allow_blank=True, write_only=True)
+    store_locator_url = serializers.URLField(required=False, allow_blank=True, write_only=True)  # branch-locator page; only relevant for retail sub-type
+
+    # Contractor-only fields
+    contractor_name = serializers.CharField(required=False, allow_blank=True, write_only=True)  # registered firm / trade name
+    contractor_category = serializers.CharField(required=False, allow_blank=True, write_only=True)  # primary work category (civil, IT, supply, etc.)
+    gem_id = serializers.CharField(required=False, allow_blank=True, write_only=True)  # Government e-Marketplace Seller ID; optional
 
     class Meta:
-        # Note: these role-specific fields (company_name, gstin, etc.) are declared
-        # explicitly above as serializer fields, not model fields on User — they're
-        # popped out in create() and used to build the related Company/Store record.
+        # Note: these role-specific fields (company_name, gstin, contractor_name, etc.) are
+        # declared explicitly above as serializer fields, not model fields on User — they are
+        # popped out in create() and used to build the related Company/Store/ContractorProfile.
         model = User
         fields = [
             'email', 'password', 'email_verified_token',
             'first_name', 'last_name', 'phone',
-            'is_company', 'is_job_seeker', 'is_store_owner',
+            'is_company', 'is_job_seeker', 'is_store_owner', 'is_contractor',
             'company_name', 'gstin', 'pan_number', 'aadhar_number',
             'store_name', 'store_type', 'store_category', 'store_url', 'store_locator_url',
+            'contractor_name', 'contractor_category', 'gem_id',
         ]
 
     def validate_email(self, value):
@@ -82,7 +91,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         the submitted email and hasn't expired, then enforces role-specific
         required fields: companies need a name and at least one government
         ID (GSTIN/PAN/Aadhar); store owners need a store name, store URL,
-        and at least one government ID.
+        and at least one government ID; contractors need a firm name and at
+        least one government ID.
         """
         # Verify the signed token matches the submitted email
         token = attrs.pop('email_verified_token', '')
@@ -114,18 +124,27 @@ class RegisterSerializer(serializers.ModelSerializer):
                     {'gstin': 'Provide at least one verification ID: GSTIN, PAN, or Aadhar number.'}
                 )
 
+        if attrs.get('is_contractor'):
+            if not attrs.get('contractor_name', '').strip():
+                raise serializers.ValidationError({'contractor_name': 'Firm / trade name is required.'})
+            if not any([attrs.get('gstin'), attrs.get('pan_number'), attrs.get('aadhar_number')]):
+                raise serializers.ValidationError(
+                    {'gstin': 'Provide at least one verification ID: GSTIN, PAN, or Aadhar number.'}
+                )
+
         return attrs
 
     @transaction.atomic
     def create(self, validated_data):
-        """Create the User and its role-specific related record (Company, Store, or JobSeeker).
+        """Create the User and its role-specific related record (Company, Store, ContractorProfile, or JobSeeker).
 
         Called by `RegisterView.create()` via `serializer.save()` after
         validation passes. Wrapped in `transaction.atomic` because a
         store-owner signup writes to three tables (User, Company, Store)
         that must all succeed or all roll back together.
         """
-        # Pop role-specific fields before creating the User
+        # Pop role-specific fields before creating the User so they don't
+        # get passed to the User constructor as unknown kwargs.
         company_name  = validated_data.pop('company_name', '')
         gstin         = validated_data.pop('gstin', '')
         pan_number    = validated_data.pop('pan_number', '')
@@ -135,6 +154,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         store_category    = validated_data.pop('store_category', '')
         store_url         = validated_data.pop('store_url', '')
         store_locator_url = validated_data.pop('store_locator_url', '')
+        contractor_name     = validated_data.pop('contractor_name', '')
+        contractor_category = validated_data.pop('contractor_category', '')
+        gem_id              = validated_data.pop('gem_id', '')
         password      = validated_data.pop('password')
 
         # Auto-generate a unique username from the email prefix
@@ -184,8 +206,22 @@ class RegisterSerializer(serializers.ModelSerializer):
                 aadhar_number=aadhar_number,
                 contact_email=user.email,
             )
+        elif user.is_contractor:
+            # Contractor accounts get a ContractorProfile in the tenders app so they can
+            # save searches, set tender alerts, and surface their firm details to staff.
+            from apps.tenders.models import ContractorProfile  # Local import avoids circular dependency between authentication and tenders apps
+            ContractorProfile.objects.create(
+                user=user,
+                firm_name=contractor_name,
+                category=contractor_category,
+                gem_id=gem_id,
+                gstin=gstin,
+                pan_number=pan_number,
+                aadhar_number=aadhar_number,
+                contact_email=user.email,
+            )
         else:
-            # Default role: plain job seeker (neither is_company nor is_store_owner set)
+            # Default role: plain job seeker (no other role flag set)
             from apps.jobseekers.models import JobSeeker  # Local import avoids a circular import between the authentication and jobseekers apps
             JobSeeker.objects.create(user=user)
 

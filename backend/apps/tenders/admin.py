@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.shortcuts import render, redirect
 from django.urls import path
 from import_export.admin import ImportExportModelAdmin
-from .models import Tender, TenderAlert, ScraperLog, ScraperSource
+from .models import Tender, TenderAlert, ScraperLog, ScraperSource, ContractorProfile
 from .resources import TenderResource, ScraperSourceResource
 
 
@@ -34,6 +34,21 @@ class TenderAdmin(ImportExportModelAdmin):
     readonly_fields = ['search_vector', 'created_at', 'updated_at']  # search_vector is derived (see Tender.save()); timestamps are auto-managed — none should be hand-edited
     date_hierarchy = 'published_at'
     list_per_page = 50
+
+
+@admin.register(ContractorProfile)
+class ContractorProfileAdmin(admin.ModelAdmin):
+    """Admin screen for reviewing contractor profiles created at registration.
+
+    Lets staff verify a contractor's identity (GSTIN/PAN/Aadhar) and see
+    their self-reported work category and GeM Seller ID. Profiles are
+    created automatically by `RegisterSerializer.create()` — staff do not
+    create them here manually.
+    """
+    list_display = ['firm_name', 'category', 'gem_id', 'gstin', 'pan_number', 'contact_email', 'created_at']
+    list_filter = ['category']  # filter by work category to spot clusters of similar contractors
+    search_fields = ['firm_name', 'contact_email', 'gstin', 'pan_number', 'gem_id']
+    readonly_fields = ['user', 'created_at']  # system-linked and auto-stamped; should not be hand-edited
 
 
 @admin.register(TenderAlert)

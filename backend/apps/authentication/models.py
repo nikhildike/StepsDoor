@@ -2,8 +2,8 @@
 
 Defines StepsDoor's custom `User` model (set as `AUTH_USER_MODEL`) which
 extends Django's `AbstractUser` with role flags distinguishing companies,
-job seekers, and store owners, plus `EmailOTP`, a short-lived one-time
-password used to verify a user's email address before registration
+job seekers, store owners, and contractors, plus `EmailOTP`, a short-lived
+one-time password used to verify a user's email address before registration
 completes (see `apps.authentication.views.SendOTPView` /
 `VerifyOTPView` and `apps.authentication.serializers.RegisterSerializer`).
 """
@@ -19,15 +19,17 @@ class User(AbstractUser):
     Extends Django's built-in `AbstractUser` (which already supplies
     username, password, email, first/last name, is_staff/is_active/
     is_superuser, and date_joined) with StepsDoor-specific fields needed to
-    tell apart the three kinds of accounts on the platform: job seekers
-    (default), companies that post paid job listings, and store owners who
-    run a storefront/catalogue. Set as `AUTH_USER_MODEL` in settings, so this
-    is the model Django's auth system, JWT auth, and `request.user` all use.
+    tell apart the four kinds of accounts on the platform: job seekers
+    (default), companies that post paid job listings, store owners who run a
+    storefront/catalogue, and contractors who track and bid on government
+    tenders. Set as `AUTH_USER_MODEL` in settings, so this is the model
+    Django's auth system, JWT auth, and `request.user` all use.
     """
     phone = models.CharField(max_length=15, blank=True)  # Contact number; optional, not used for login
     is_company = models.BooleanField(default=False)  # True for company-role accounts (can post jobs, has a related Company record); checked by IsCompanyUser-style permissions
-    is_job_seeker = models.BooleanField(default=False)  # True for job-seeker accounts (browse jobs, save jobs, set alerts); default role for accounts that are neither company nor store owner
+    is_job_seeker = models.BooleanField(default=False)  # True for job-seeker accounts (browse jobs, save jobs, set alerts); default role for accounts that are neither company, store owner, nor contractor
     is_store_owner = models.BooleanField(default=False)  # True for store owners; RegisterSerializer.create() also force-sets is_company=True for these so they get a Company (and therefore a careers page) in addition to their Store
+    is_contractor = models.BooleanField(default=False)  # True for contractor accounts; gets a ContractorProfile record (apps.tenders.models) to store firm details and enable tender alerts
     created_at = models.DateTimeField(auto_now_add=True)  # Account creation timestamp, set once automatically on first save
 
     class Meta:

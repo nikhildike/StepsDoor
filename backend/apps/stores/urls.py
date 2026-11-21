@@ -11,4 +11,6 @@ urlpatterns = [
     path('me/', views.MyStoreView.as_view(), name='my-store'),
     # POST — record a click on the given store and return its resolved (affiliate) redirect URL. Public, no auth.
     path('<int:pk>/click/', views.StoreClickView.as_view(), name='store-click'),
+    # GET — list active admin-curated featured links (supports ?page= and ?type= filters). Public, no auth.
+    path('featured-links/', views.FeaturedLinkListView.as_view(), name='featured-link-list'),
 ]

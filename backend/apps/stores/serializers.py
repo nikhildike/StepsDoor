@@ -3,9 +3,12 @@
 Two serializers cover the read vs. write shape of a Store: `StoreSerializer`
 is the full public/read representation, `StoreUpdateSerializer` is the
 restricted set of fields a store owner may edit about their own store.
+
+`FeaturedLinkSerializer` exposes the admin-curated standalone links that appear
+on the Shopping and Retail Stores pages without belonging to any Store.
 """
 from rest_framework import serializers
-from .models import Store
+from .models import Store, FeaturedLink
 
 
 class StoreSerializer(serializers.ModelSerializer):
@@ -52,3 +55,17 @@ class StoreUpdateSerializer(serializers.ModelSerializer):
             'website_url', 'store_locator_url', 'affiliate_url',
             'description', 'tagline', 'contact_phone',
         ]
+
+
+class FeaturedLinkSerializer(serializers.ModelSerializer):
+    """Read-only serializer for admin-curated standalone featured links.
+
+    Used by `FeaturedLinkListView` (GET /api/stores/featured-links/) so the
+    frontend can fetch offer/shopping links that were pasted in Django admin
+    without being attached to any registered Store.
+    """
+    class Meta:
+        model = FeaturedLink
+        fields = ['id', 'url', 'label', 'logo', 'description', 'link_type', 'page']
+        # All fields are read-only at the API level — only admin can create/edit.
+        read_only_fields = ['id', 'url', 'label', 'logo', 'description', 'link_type', 'page']

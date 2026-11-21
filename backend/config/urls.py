@@ -43,6 +43,10 @@ urlpatterns = [
     # affiliate-aware outbound redirect endpoint (see core.affiliate).
     path('api/stores/', include('apps.stores.urls')),
 
+    # Local services directory — lawyers, plumbers, mechanics, etc. with
+    # address/contact info (admin-curated, see apps.services.models).
+    path('api/services/', include('apps.services.urls')),
+
     # API schema & docs — drf-spectacular: raw OpenAPI schema plus
     # Swagger UI and ReDoc viewers for interactive API documentation.
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

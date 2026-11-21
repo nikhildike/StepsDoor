@@ -9,8 +9,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 
-from .models import Store
-from .serializers import StoreSerializer, StoreUpdateSerializer
+from .models import Store, FeaturedLink
+from .serializers import StoreSerializer, StoreUpdateSerializer, FeaturedLinkSerializer
 from core.permissions import IsStoreOwner
 from core.affiliate import build_affiliate_url
 
@@ -90,6 +90,34 @@ class StoreClickView(APIView):
         return Response({'redirect_url': redirect_url})
 
 
+class FeaturedLinkListView(generics.ListAPIView):
+    """Public list of active admin-curated featured links.
+
+    Backs the Shopping and Retail Stores pages — open to anyone, no auth
+    required. Supports optional query params:
+      - `?page=shopping|retail|both` — filter by target page
+      - `?type=offer|shopping`       — filter by link type
+    """
+    serializer_class = FeaturedLinkSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        """Build the featured-links queryset, applying optional `target_page` and `type` query params.
+
+        Uses `target_page` (not `page`) to avoid colliding with Django REST
+        Framework's built-in `page` pagination parameter.
+        """
+        qs = FeaturedLink.objects.filter(is_active=True)
+        # `target_page` = 'shopping' | 'retail' — "both" links match either.
+        target_page = self.request.query_params.get('target_page')
+        type_param  = self.request.query_params.get('type')
+        if target_page:
+            qs = qs.filter(page__in=[target_page, 'both'])
+        if type_param:
+            qs = qs.filter(link_type=type_param)
+        return qs
+
+
 class MyStoreView(generics.RetrieveUpdateAPIView):
     """Retrieve or update the authenticated store owner's store.
 
@@ -101,8 +129,18 @@ class MyStoreView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsStoreOwner]
 
     def get_object(self):
-        """Return the calling user's own Store (via the `user.store` one-to-one), ignoring any pk in the URL."""
-        return self.request.user.store
+        """Return the calling user's own Store (via the `user.store` one-to-one), ignoring any pk in the URL.
+
+        Raises Http404 (→ DRF 404 response) if the user doesn't have a Store
+        record yet (e.g. an account created before the automatic Store creation
+        was added to RegisterSerializer) so the frontend receives a clean 404
+        rather than a 500.
+        """
+        try:
+            return self.request.user.store
+        except Store.DoesNotExist:
+            from django.http import Http404
+            raise Http404('No store found for this account.')
 
     def get_serializer_class(self):
         """Use the restricted write serializer on PUT/PATCH, the full read serializer on GET."""

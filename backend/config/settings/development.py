@@ -13,6 +13,12 @@ from .base import *
 
 DEBUG = True  # verbose error pages; explicit here even though base.py already reads DEBUG from env
 
+# Dev convenience: accept the Django Host header from any address (e.g. a
+# phone hitting the dev machine's LAN IP directly via Expo Go, since
+# ALLOWED_HOSTS defaults to localhost/127.0.0.1 in base.py which only
+# covers same-machine clients). Never do this in production.
+ALLOWED_HOSTS = ['*']
+
 # Dev convenience: accept requests from any origin (e.g. the Vite dev server
 # on a dynamic port, Expo on a LAN IP) instead of maintaining an allowlist.
 # Never do this in production — see CORS_ALLOWED_ORIGINS in production.py.

@@ -254,3 +254,39 @@ class ScraperLog(models.Model):
     def __str__(self):
         """Human-readable summary for Django admin lists, e.g. "mahatenders.gov.in — success @ 2026-08-18 06:00"."""
         return f"{self.portal} — {self.status} @ {self.started_at:%Y-%m-%d %H:%M}"
+
+
+class ContractorProfile(models.Model):
+    """Profile for contractor accounts that track and bid on government tenders.
+
+    Created by `RegisterSerializer.create()` (in `apps.authentication.serializers`)
+    when a new user registers with `is_contractor=True`. One-to-one with User
+    so there is at most one contractor profile per account. Stores the firm's
+    identity and verification credentials for staff review, and provides the
+    anchor for future contractor-specific features (saved tender searches,
+    bid tracking, tender alerts keyed to the contractor's work category).
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='contractor_profile',  # access via request.user.contractor_profile
+    )
+    firm_name = models.CharField(max_length=255)  # Registered firm / trade name, required at signup
+    category = models.CharField(max_length=100, blank=True)  # Primary work category (civil, IT, supply, etc.); used to suggest relevant tenders
+    gem_id = models.CharField(max_length=100, blank=True)  # Government e-Marketplace Seller ID; optional, provided at signup
+    # Verification IDs — at least one must be supplied at signup (validated by RegisterSerializer);
+    # stored here so staff can vet the contractor's identity via the admin.
+    gstin = models.CharField(max_length=15, blank=True)         # 15-char GST Identification Number
+    pan_number = models.CharField(max_length=10, blank=True)    # 10-char Permanent Account Number
+    aadhar_number = models.CharField(max_length=12, blank=True) # 12-digit Aadhar UID
+    contact_email = models.EmailField()  # Copied from User.email at creation; kept here for quick admin reference without joining back to User
+    created_at = models.DateTimeField(auto_now_add=True)  # Profile creation timestamp
+
+    class Meta:
+        verbose_name = 'Contractor Profile'
+        verbose_name_plural = 'Contractor Profiles'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        """Human-readable label for Django admin lists, e.g. "Sharma Constructions Pvt. Ltd. (user@example.com)"."""
+        return f"{self.firm_name} ({self.contact_email})"
