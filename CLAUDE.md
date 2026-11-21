@@ -33,6 +33,7 @@ mobile/     ← Expo React Native app (job seekers only)
 
 ```bash
 python manage.py runserver
+python manage.py runserver 0.0.0.0:8000  # bind all interfaces — needed so a phone on the same LAN (e.g. testing the mobile app via Expo Go) can reach it; plain `runserver` only binds 127.0.0.1
 python manage.py makemigrations <app>
 python manage.py migrate
 python manage.py test
@@ -65,6 +66,7 @@ scrapy crawl mahatenders -s SCRAPY_SETTINGS_MODULE=scrapers.settings
 | `govtjobs` | Govt job listings, GovtJobAlert |
 | `freelancers` | Freelancer profiles (early-stage) |
 | `stores` | Company storefront/catalogue listings |
+| `services` | Local service-provider directory (lawyers, plumbers, mechanics, etc.) |
 
 **Shared utilities** (`backend/core/`): `permissions.py` (IsCompanyUser, IsJobSeeker, IsOwner), `pagination.py` (20/page), `exceptions.py` (custom JSON error handler).
 
@@ -124,28 +126,56 @@ npm run lint             # expo lint
 eas build --platform android  # cloud APK build (no Android Studio needed)
 ```
 
-> Always check https://docs.expo.dev/versions/v57.0.0/ before writing Expo code — SDK 57 has significant API changes.
+> Always check https://docs.expo.dev/versions/v54.0.0/ before writing Expo code — SDK 54 has significant API changes.
 
 **Entry point**: `index.js` → `registerRootComponent(App)` → `src/App.tsx`
 
 **Navigation** (React Navigation v6):
 - `RootNavigator` — shows `SplashScreen` (loads token from AsyncStorage), then switches between `AuthNavigator` and `AppNavigator`
 - `AuthNavigator` — stack: Login → Register
-- `AppNavigator` — 6-tab bottom nav: Jobs, Search, Tenders, Govt Jobs, Alerts, Profile
-- Each content tab has its own stack navigator for list → detail screens
+- `AppNavigator` — persistent `BurgerMenu` top bar (sign-in link + hamburger → Profile/Alerts/Settings) above a 5-tab bottom nav: **Home, Jobs, Tenders, Shopping, Services**
+  - **Home tab** (`HomeTabScreen`) — branding header + keyword search bar (unified search across Jobs, Tenders, and static Shopping directory) + "What's New" feed; Search is no longer a separate tab
+  - **Jobs tab** (`JobsStackNavigator`) — list → detail; Govt Jobs and Company directory are reachable from within this stack, not top-level tabs
+  - **Tenders tab** (`TendersStackNavigator`) — list → detail
+  - **Shopping tab** (`ShoppingScreen`) — merged Online Stores + Retail Chains as a segmented toggle; Retail is no longer a separate tab
+  - **Services tab** (`ServicesScreen`) — DB-backed local service-provider directory (`backend/apps/services`)
+  - Profile, Alerts, and Settings are accessed via `BurgerMenu` (root-stack screens), not tab bar items
 
 **Source layout** (`mobile/src/`):
 
 | Directory | Purpose |
 |---|---|
-| `screens/` | auth/, jobs/, tenders/, govtjobs/, seeker/ |
-| `navigation/` | RootNavigator, AuthNavigator, AppNavigator, per-tab stack navigators |
-| `components/common/` | Button, Input, Spinner, Badge, EmptyState, ScreenWrapper |
-| `store/` | authStore.ts (AsyncStorage), jobStore.ts |
-| `services/` | Same logic as web — api.ts uses `10.0.2.2:8000` for Android emulator |
-| `theme/` | colors.ts, typography.ts, spacing.ts — import from here, never hardcode values |
+| `screens/` | auth/, home/, jobs/, tenders/, govtjobs/, shopping/, services/, settings/, seeker/ |
+| `navigation/` | RootNavigator, AuthNavigator, AppNavigator, per-tab stack navigators, BurgerMenu |
+| `components/common/` | Button, Input, Spinner, Badge, EmptyState, ScreenWrapper, FilterPickerButton |
+| `components/companies/` | CareerLinkCard, CompanyDirectorySection (used within Jobs stack) |
+| `components/navigation/` | BurgerMenu (persistent top bar with sign-in + hamburger) |
+| `data/` | Static data files, e.g. `companyDirectory.ts` (company listings not yet in DB) |
+| `store/` | authStore.ts (AsyncStorage), jobStore.ts, themeStore.ts (light/dark theme) |
+| `services/` | Same logic as web — api.ts uses `10.0.2.2:8000` for Android emulator; includes companyService.ts, serviceProviderService.ts |
+| `theme/` | colors.ts exports `useThemeColors()` hook (light/dark aware); typography.ts, spacing.ts — import from here, never hardcode values |
 
 **Path alias**: `@/` → `src/` (via `babel-plugin-module-resolver` in `babel.config.js`)
+
+---
+
+## Testing
+
+**Backend**: `python manage.py test` (all apps) or `python manage.py test apps.jobs` (single app) — see Backend section above.
+
+**Frontend** (`frontend/`): Vitest + React Testing Library.
+```bash
+npm test         # run once (CI mode)
+npm run test:watch
+```
+Config lives in `vite.config.js`'s `test` block (`jsdom` environment, `globals: true`); `src/setupTests.js` registers jest-dom matchers. Test files live next to the code they cover as `*.test.js`/`*.test.jsx`.
+
+**Mobile** (`mobile/`): Jest via the `jest-expo` preset + React Native Testing Library.
+```bash
+npm test         # run once
+npm run test:watch
+```
+Config lives in `package.json`'s `jest` key; `jest.setup.js` swaps in the official AsyncStorage mock so Zustand stores that persist to `AsyncStorage` (e.g. `themeStore.ts`) can be unit-tested without a device/emulator. Test files live next to the code they cover as `*.test.ts`/`*.test.tsx`.
 
 ---
 
