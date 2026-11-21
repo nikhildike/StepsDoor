@@ -1,18 +1,24 @@
 /**
- * Job Seeker Overview page (seeker dashboard home).
+ * Account dashboard home, shared by job seekers and contractors.
  *
  * Route: `/seeker` or `/seeker/overview` (index route under the seeker account layout).
- * Access: job seeker accounts only.
+ * Access: any authenticated user (ProtectedRoute checks token only, not role).
  *
- * Summarizes the seeker's account activity: saved jobs count, active alert
- * count, "new jobs today" count, a preview of saved jobs, and a preview of
- * the latest job openings across the platform.
+ * Job seekers see: Saved Jobs count, Active Alerts count, New Jobs Today count,
+ * a saved-jobs preview, and a latest-job-openings preview.
+ *
+ * Contractors see: New Tenders count, Tender Alerts count, Open Tenders count,
+ * a recent-tenders preview, and a tender-alerts preview — all job-seeker-specific
+ * widgets are hidden for them.
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bookmark, Bell, Briefcase, ExternalLink } from 'lucide-react'
+import { Bookmark, Bell, Briefcase, ExternalLink, FileText, MapPin, Clock } from 'lucide-react'
 import { seekerService } from '@/services/seekerService'
 import { jobService } from '@/services/jobService'
+import { tenderService } from '@/services/tenderService'
+import { useAuthStore } from '@/store/authStore'
+import { formatDate } from '@/utils/formatDate'
 
 // Maps backend job_type enum values to human-readable labels for display.
 const JOB_TYPE_LABELS = {
@@ -21,46 +27,124 @@ const JOB_TYPE_LABELS = {
 }
 
 /**
+ * Renders the contractor's personalized dashboard: tender stat cards, a
+ * recent-tenders preview table, and a tender-alerts preview. Replaces all
+ * job-seeker-specific content (Saved Jobs, New Jobs Today, etc.) when the
+ * logged-in user has `is_contractor = true`.
+ *
+ * @param {{ name: string, tenders: Array, tenderAlerts: Array }} props
+ */
+function ContractorDashboard({ name, tenders, tenderAlerts }) {
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold">Welcome back, {name}!</h1>
+        <p className="text-muted-foreground mt-1">Here's the latest tender activity.</p>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-xl border border-border p-6 flex items-center gap-4">
+          <div className="p-3 rounded-lg bg-blue-500"><FileText className="h-6 w-6 text-white" /></div>
+          <div>
+            <p className="text-sm text-muted-foreground">New Tenders</p>
+            {/* tenders is capped at 5 by page_size; the "+" signals there may be more */}
+            <p className="text-2xl font-bold">{tenders.length > 0 ? `${tenders.length}+` : '0'}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-border p-6 flex items-center gap-4">
+          <div className="p-3 rounded-lg bg-purple-500"><Bell className="h-6 w-6 text-white" /></div>
+          <div>
+            <p className="text-sm text-muted-foreground">Tender Alerts</p>
+            <p className="text-2xl font-bold">{tenderAlerts.filter(a => a.is_active !== false).length}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-border p-6 flex items-center gap-4">
+          <div className="p-3 rounded-lg bg-green-500"><Briefcase className="h-6 w-6 text-white" /></div>
+          <div>
+            <p className="text-sm text-muted-foreground">Open Tenders</p>
+            <p className="text-2xl font-bold">{tenders.length > 0 ? `${tenders.length}+` : '0'}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent tenders preview */}
+      <div className="bg-white rounded-xl border border-border">
+        <div className="p-5 border-b flex items-center justify-between">
+          <h2 className="font-semibold">Recent Tenders</h2>
+          {/* /seeker/tenders keeps the sidebar visible (tenders rendered inside the seeker layout) */}
+          <Link to="/seeker/tenders" className="text-sm text-primary hover:underline">Browse all</Link>
+        </div>
+        {tenders.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">No tenders available right now.</div>
+        ) : (
+          <div className="divide-y">
+            {tenders.map(tender => (
+              <div key={tender.id} className="px-5 py-4 flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="font-medium text-sm line-clamp-1">{tender.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-3">
+                    <span>{tender.organisation}</span>
+                    {tender.state && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />{tender.state}
+                      </span>
+                    )}
+                    {tender.submission_deadline && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />Due {formatDate(tender.submission_deadline)}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <Link to={`/tenders/${tender.id}`} className="text-xs text-primary hover:underline shrink-0">
+                  View →
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Tender alerts preview — only rendered when the contractor has at least one alert configured. */}
+      {tenderAlerts.length > 0 && (
+        <div className="bg-white rounded-xl border border-border">
+          <div className="p-5 border-b flex items-center justify-between">
+            <h2 className="font-semibold">Your Tender Alerts</h2>
+            <Link to="/seeker/alerts" className="text-sm text-primary hover:underline">Manage</Link>
+          </div>
+          <div className="divide-y">
+            {tenderAlerts.slice(0, 3).map(alert => (
+              <div key={alert.id} className="px-5 py-4 flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm">{alert.keyword || 'All tenders'}</p>
+                  {alert.state && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{alert.state}</p>
+                  )}
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  alert.is_active !== false
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {alert.is_active !== false ? 'Active' : 'Paused'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * Renders the seeker's personalized dashboard: stat cards, a saved-jobs
  * preview, and a preview of the most recent job listings.
+ *
+ * @param {{ name: string, savedJobs: Array, alerts: Array, recentJobs: Array }} props
  */
-export default function SeekerOverview() {
-  // Job seeker's profile (first/last name used for the welcome greeting).
-  const [profile, setProfile] = useState(null)
-  // Jobs the seeker has bookmarked.
-  const [savedJobs, setSavedJobs] = useState([])
-  // Job alerts the seeker has configured.
-  const [alerts, setAlerts] = useState([])
-  // Most recent job listings platform-wide (used for the "Latest Job Openings" preview and the "New Jobs Today" stat).
-  const [recentJobs, setRecentJobs] = useState([])
-  // True while the initial combined fetch is in flight.
-  const [loading, setLoading] = useState(true)
-
-  // Fetches profile, saved jobs, alerts, and the 5 most recent job listings in parallel on mount.
-  // GET /jobseekers/profiles/me/ (jobseekers app)
-  // GET /jobseekers/saved-jobs/ (jobseekers app)
-  // GET /alerts/ (alerts app)
-  // GET /jobs/?page_size=5 (jobs app) — latest public job listings.
-  useEffect(() => {
-    Promise.all([
-      seekerService.profile(),
-      seekerService.savedJobs(),
-      seekerService.alerts(),
-      jobService.list({ page_size: 5 }),
-    ]).then(([p, s, a, j]) => {
-      setProfile(p.data)
-      setSavedJobs(s.data.results ?? s.data)
-      setAlerts(a.data.results ?? a.data)
-      setRecentJobs(j.data.results ?? j.data)
-    }).finally(() => setLoading(false))
-  }, [])
-
-  // Builds the display name for the welcome header, falling back to "there" if no name is set.
-  const name = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'there' : 'there'
-
-  // Loading state: show a placeholder until all four data sources have loaded.
-  if (loading) return <div className="text-muted-foreground">Loading...</div>
-
+function SeekerDashboard({ name, savedJobs, alerts, recentJobs }) {
   return (
     <div className="space-y-8">
       <div>
@@ -151,5 +235,75 @@ export default function SeekerOverview() {
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * Dashboard entry point: reads the current user's role from the auth store
+ * and delegates to either `ContractorDashboard` or `SeekerDashboard`. Fetches
+ * only the data relevant to the role so contractors never trigger job-seeker
+ * API calls and vice versa.
+ */
+export default function SeekerOverview() {
+  const { user } = useAuthStore()
+  // True for contractor accounts; determines which data to fetch and which
+  // dashboard component to render.
+  const isContractor = !!user?.is_contractor
+
+  // Shared: profile name for the greeting header.
+  const [profile, setProfile] = useState(null)
+  // Seeker-only state.
+  const [savedJobs, setSavedJobs] = useState([])
+  const [alerts, setAlerts] = useState([])
+  const [recentJobs, setRecentJobs] = useState([])
+  // Contractor-only state.
+  const [tenders, setTenders] = useState([])
+  const [tenderAlerts, setTenderAlerts] = useState([])
+  // True while the initial combined fetch is in flight.
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (isContractor) {
+      // Contractors need recent tenders and their tender alerts, not saved
+      // jobs or job listings. Profile is still fetched for the greeting name.
+      Promise.all([
+        seekerService.profile().catch(() => ({ data: null })),
+        tenderService.list({ page_size: 5 }),
+        tenderService.alerts(),
+      ]).then(([p, t, ta]) => {
+        setProfile(p.data)
+        setTenders(t.data.results ?? t.data)
+        setTenderAlerts(ta.data.results ?? ta.data)
+      }).finally(() => setLoading(false))
+    } else {
+      // Job seekers: profile, saved jobs, job alerts, and recent job listings.
+      // GET /jobseekers/profiles/me/, /jobseekers/saved-jobs/, /alerts/, /jobs/?page_size=5
+      Promise.all([
+        seekerService.profile(),
+        seekerService.savedJobs(),
+        seekerService.alerts(),
+        jobService.list({ page_size: 5 }),
+      ]).then(([p, s, a, j]) => {
+        setProfile(p.data)
+        setSavedJobs(s.data.results ?? s.data)
+        setAlerts(a.data.results ?? a.data)
+        setRecentJobs(j.data.results ?? j.data)
+      }).finally(() => setLoading(false))
+    }
+  }, [isContractor])
+
+  // Builds the display name for the welcome header.
+  // Priority: profile first/last name → user first/last name (from auth store)
+  // → username → 'there' as final fallback.
+  const profileName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() : ''
+  const authName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : ''
+  const name = profileName || authName || user?.username || 'there'
+
+  if (loading) return <div className="text-muted-foreground">Loading...</div>
+
+  return isContractor ? (
+    <ContractorDashboard name={name} tenders={tenders} tenderAlerts={tenderAlerts} />
+  ) : (
+    <SeekerDashboard name={name} savedJobs={savedJobs} alerts={alerts} recentJobs={recentJobs} />
   )
 }

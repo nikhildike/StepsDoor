@@ -62,18 +62,25 @@ import JobsLayout from '@/components/layout/JobsLayout'
 /**
  * Route guard used to gate authenticated sections of the app.
  *
- * Redirects to `/login` if there is no auth token at all. When
- * `requireCompany` is set, only company (or store-owner, since store
- * owners are also flagged `is_company`) accounts pass; otherwise
- * redirects to `/`. When `requireStore` is set, only store-owner
- * accounts pass; otherwise redirects to `/`.
+ * Returns null (renders nothing) until Zustand has finished rehydrating the
+ * auth session from localStorage — this prevents a premature redirect to
+ * `/login` during the brief microtask window before the persisted token is
+ * available (a Zustand v5 behaviour). Once hydrated, redirects to `/login`
+ * if there is no auth token. When `requireCompany` is set, only company (or
+ * store-owner, since store owners are also flagged `is_company`) accounts
+ * pass; otherwise redirects to `/`. When `requireStore` is set, only
+ * store-owner accounts pass; otherwise redirects to `/`.
  *
  * @param {{ children: import('react').ReactNode, requireCompany?: boolean, requireStore?: boolean }} props
- * @returns {JSX.Element} Either the guarded `children`, or a `<Navigate>` redirect.
+ * @returns {JSX.Element|null} Either the guarded `children`, a `<Navigate>` redirect, or null while hydrating.
  * Used by: the `/dashboard`, `/seeker`, and `/store` route subtrees below.
  */
 function ProtectedRoute({ children, requireCompany = false, requireStore = false }) {
-  const { user, token } = useAuthStore()
+  const { user, token, _hasHydrated } = useAuthStore()
+  // Hold off until Zustand has loaded the persisted session from localStorage.
+  // Without this guard, the initial render sees token=null and sends the user
+  // to /login even when a valid session exists in storage.
+  if (!_hasHydrated) return null
   if (!token) return <Navigate to="/login" replace />
   // store owners have is_company=true so requireCompany passes; keep explicit check for clarity
   if (requireCompany && !user?.is_company && !user?.is_store_owner) return <Navigate to="/" replace />
@@ -181,14 +188,17 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        {/* Job seeker dashboard/overview — guard: authenticated (inherited) */}
+        {/* Job seeker/contractor dashboard — guard: authenticated (inherited) */}
         <Route index element={<SeekerOverview />} />
         {/* List of jobs the seeker has bookmarked/saved — guard: authenticated (inherited) */}
         <Route path="saved" element={<SavedJobs />} />
-        {/* Manage job alert subscriptions — guard: authenticated (inherited) */}
+        {/* Manage job/tender alert subscriptions — guard: authenticated (inherited) */}
         <Route path="alerts" element={<Alerts />} />
-        {/* Edit job seeker profile — guard: authenticated (inherited) */}
+        {/* Edit profile — guard: authenticated (inherited) */}
         <Route path="profile" element={<SeekerProfile />} />
+        {/* Tender listings rendered inside the seeker layout so contractors keep
+            the sidebar visible when browsing tenders from their dashboard. */}
+        <Route path="tenders" element={<Tenders />} />
       </Route>
 
       {/* Store owner routes — guarded by ProtectedRoute requireStore

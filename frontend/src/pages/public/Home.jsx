@@ -9,14 +9,15 @@
  * parallel on mount; failures are swallowed per-section so one broken API
  * call doesn't blank the whole page.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Search, MapPin, Clock, Building2, FileText, Briefcase, ArrowRight, IndianRupee, Users, ShoppingBag, Monitor, Shirt, Smartphone, ShoppingCart, Sparkles, Home as HomeIcon, BookOpen, Dumbbell, Store, Wrench, Truck, HeartPulse, GraduationCap, Globe, UtensilsCrossed, Plane, BadgeCheck, ExternalLink } from 'lucide-react'
+import { Search, MapPin, Clock, Building2, FileText, Briefcase, ArrowRight, IndianRupee, Users, ShoppingBag, Monitor, Shirt, Smartphone, ShoppingCart, Sparkles, Home as HomeIcon, BookOpen, Dumbbell, Store, Wrench, Truck, HeartPulse, GraduationCap, Globe, UtensilsCrossed, Plane, BadgeCheck, ExternalLink, Tag, X } from 'lucide-react'
 import { jobService } from '@/services/jobService'
 import { tenderService } from '@/services/tenderService'
 import { govtJobService } from '@/services/govtJobService'
 import { companyService } from '@/services/companyService'
 import { storeService } from '@/services/storeService'
+import { useAuthStore } from '@/store/authStore'
 import { timeAgo, formatDate } from '@/utils/formatDate'
 import { JOB_TYPES } from '@/utils/constants'
 
@@ -139,6 +140,86 @@ const SHOPPING_CATEGORIES = [
 ]
 
 /**
+ * Modal overlay that lists all active Special Offer links (from FeaturedLink).
+ * Closes on backdrop click, Escape key, or the X button.
+ * @param {{ entries: Array, onClose: function }} props
+ */
+function SpecialOffersModal({ entries, onClose }) {
+  const overlayRef = useRef(null)
+
+  // Close on Escape key
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // Prevent body scroll while modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
+  return (
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={e => { if (e.target === overlayRef.current) onClose() }}
+    >
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+        {/* Modal header */}
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b">
+          <Tag className="h-4 w-4 text-orange-500 shrink-0" />
+          <h2 className="text-sm font-bold text-foreground flex-1">Special Offers</h2>
+          <span className="text-xs text-muted-foreground mr-2">
+            {entries.length} deal{entries.length !== 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-gray-100 transition-colors"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Scrollable offer list */}
+        <div className="overflow-y-auto p-5">
+          <div className="grid sm:grid-cols-2 gap-3">
+            {entries.map(({ url, label, logo, description }, idx) => {
+              let hostLabel = url
+              try { hostLabel = new URL(url).hostname.replace(/^www\./, '') } catch { /* keep raw url */ }
+              return (
+                <a
+                  key={idx}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl hover:bg-orange-100 hover:border-orange-300 hover:shadow-sm transition-all group"
+                >
+                  {logo ? (
+                    <img src={logo} alt={label} className="h-8 w-8 rounded-lg object-cover shrink-0" />
+                  ) : (
+                    <div className="h-8 w-8 rounded-lg bg-orange-200 flex items-center justify-center shrink-0">
+                      <Tag className="h-4 w-4 text-orange-600" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-orange-900 truncate leading-tight">{label}</p>
+                    <p className="text-[11px] text-orange-600 truncate leading-tight">{description || hostLabel}</p>
+                  </div>
+                  <ExternalLink className="h-3.5 w-3.5 text-orange-400 group-hover:text-orange-600 shrink-0 transition-colors" />
+                </a>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
  * Renders the homepage: hero search, "Latest Jobs", "Companies Hiring",
  * "Freelance & Remote Work", "Service Providers", "Shopping & Stores",
  * "Retail Stores", subscribed "Retail Stores on StepsDoor", side-by-side
@@ -148,49 +229,79 @@ const SHOPPING_CATEGORIES = [
  */
 export default function Home() {
   const navigate = useNavigate()
+  // Contractor accounts see a tender-focused dashboard rather than the
+  // default jobs/companies/freelancers feed.
+  const { user } = useAuthStore()
+  const isContractor = !!user?.is_contractor
+
   const [searchQuery, setSearchQuery] = useState('') // controlled input for the hero search bar
   const [jobs, setJobs] = useState([])
   const [tenders, setTenders] = useState([])
   const [govtJobs, setGovtJobs] = useState([])
   const [companies, setCompanies] = useState([])
   const [retailStores, setRetailStores] = useState([]) // subscribed retail stores that have a public website_url (used for the "on StepsDoor" preview)
+  const [offerLinks, setOfferLinks] = useState([]) // admin-curated FeaturedLink offer entries shown in the Special Offers modal
+  const [offersModalOpen, setOffersModalOpen] = useState(false) // controls the Special Offers modal
 
-  // Fires once on mount: kicks off five independent preview fetches in
-  // parallel (latest jobs, tenders, govt jobs, subscribed companies,
-  // subscribed retail stores). Each request's failure is caught and
-  // swallowed individually so one down service doesn't blank the page —
-  // that section's list just stays empty and its "no data yet" copy shows.
+  // Fires once on mount: kicks off independent preview fetches in parallel.
+  // Each request's failure is caught and swallowed individually so one down
+  // service doesn't blank the page. Contractors fetch more tenders (6 vs 4)
+  // since that section is their primary feed.
   useEffect(() => {
     jobService.list({ page_size: 6 }).then(({ data }) => setJobs((data.results ?? data).slice(0, 6))).catch(() => {})
-    tenderService.list({ page_size: 4 }).then(({ data }) => setTenders((data.results ?? data).slice(0, 4))).catch(() => {})
+    tenderService.list({ page_size: 6 }).then(({ data }) => setTenders((data.results ?? data).slice(0, 6))).catch(() => {})
     govtJobService.list({ page_size: 4 }).then(({ data }) => setGovtJobs((data.results ?? data).slice(0, 4))).catch(() => {})
     companyService.list().then(({ data }) => setCompanies(data.results ?? data)).catch(() => {})
     storeService.listRetail().then(({ data }) => {
       const all = data.results ?? data
       setRetailStores(all.filter(s => s.website_url))
     }).catch(() => {})
+    // Fetch active offer-type FeaturedLinks (no page filter so all pages' offers appear here)
+    storeService.listFeaturedLinks({ type: 'offer' })
+      .then(({ data }) => setOfferLinks(data.results ?? data))
+      .catch(() => {})
   }, [])
 
-  // Hero search form submit handler — navigates to the Jobs listing page
-  // with the query encoded as a `search` query param (or with no param at
-  // all if the input was left blank/whitespace).
+  // Hero search form submit handler — contractors are sent to the tenders
+  // listing, everyone else goes to jobs. The query is encoded as a `search`
+  // query param (omitted if blank).
   const handleSearch = (e) => {
     e.preventDefault()
-    navigate(`/jobs${searchQuery.trim() ? `?search=${encodeURIComponent(searchQuery.trim())}` : ''}`)
+    const q = searchQuery.trim()
+    const dest = isContractor ? '/tenders' : '/jobs'
+    navigate(`${dest}${q ? `?search=${encodeURIComponent(q)}` : ''}`)
   }
 
   return (
     <div className="bg-gray-50 min-h-screen">
 
+      {/* Special Offers modal — mounted at root level so it sits above all content */}
+      {offersModalOpen && (
+        <SpecialOffersModal entries={offerLinks} onClose={() => setOffersModalOpen(false)} />
+      )}
+
       {/* Hero */}
       <section className="bg-white border-b">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
-            Step into Your Perfect Door
-          </h1>
-          <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-            Private jobs, government tenders, sarkari naukri, freelance gigs &amp; shopping — all in one place.
-          </p>
+          {isContractor ? (
+            <>
+              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
+                Government Tenders for Contractors
+              </h1>
+              <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
+                Latest procurement notices from mahatenders.gov.in, eprocure.gov.in & more — free to browse.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
+                Step into Your Perfect Door
+              </h1>
+              <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
+                Private jobs, government tenders, sarkari naukri, freelance gigs & shopping — all in one place.
+              </p>
+            </>
+          )}
 
           <form onSubmit={handleSearch} className="mt-8 flex gap-2 max-w-xl mx-auto">
             <div className="relative flex-1">
@@ -199,7 +310,7 @@ export default function Home() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Job title, company, or keyword..."
+                placeholder={isContractor ? 'Tender keyword, organisation, or state...' : 'Job title, company, or keyword...'}
                 className="w-full h-11 pl-9 pr-4 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -212,107 +323,143 @@ export default function Home() {
           </form>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground">
-            {companies.length > 0 && <span><strong className="text-foreground">{companies.length}+</strong> companies hiring</span>}
-            {jobs.length > 0 && <span><strong className="text-foreground">New</strong> jobs added daily</span>}
-            <span><strong className="text-foreground">Free</strong> to browse & apply</span>
+            {isContractor ? (
+              <>
+                {tenders.length > 0 && <span><strong className="text-foreground">New</strong> tenders added daily</span>}
+                <span><strong className="text-foreground">Free</strong> to browse</span>
+                <span>Multiple official portals</span>
+              </>
+            ) : (
+              <>
+                {companies.length > 0 && <span><strong className="text-foreground">{companies.length}+</strong> companies hiring</span>}
+                {jobs.length > 0 && <span><strong className="text-foreground">New</strong> jobs added daily</span>}
+                <span><strong className="text-foreground">Free</strong> to browse & apply</span>
+              </>
+            )}
           </div>
         </div>
       </section>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-14">
 
-        {/* Latest Private Jobs */}
-        <section>
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-xl font-bold">Latest Jobs</h2>
-              <p className="text-sm text-muted-foreground mt-0.5">From companies hiring right now</p>
-            </div>
-            <Link to="/jobs" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-              View all <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          {/* Empty state vs. up to 6 latest job previews */}
-          {jobs.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No jobs yet — check back soon.</p>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {jobs.map(job => <JobCard key={job.id} job={job} />)}
-            </div>
-          )}
-        </section>
-
-        {/* Companies Hiring — whole section hidden until the companies fetch resolves with at least one result */}
-        {companies.length > 0 && (
+        {isContractor ? (
+          /* Contractor dashboard: lead with a full-width New Tenders section */
           <section>
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-xl font-bold flex items-center gap-2">
-                  <BadgeCheck className="h-5 w-5 text-primary" /> Companies Hiring on StepsDoor
+                  <FileText className="h-5 w-5 text-primary" /> New Tenders
                 </h2>
-                <p className="text-sm text-muted-foreground mt-0.5">Verified companies — browse open positions and apply directly</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Latest notices from official procurement portals</p>
               </div>
-              <Link to="/companies" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+              <Link to="/tenders" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
                 View all <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
-            {/* Only the first 6 subscribed companies are previewed here; "View all" links to /companies for the rest */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {companies.slice(0, 6).map(company => (
-                <Link
-                  key={company.id}
-                  to={`/careers/${company.slug}`}
-                  className="flex items-center gap-3 p-3 bg-white border border-border rounded-xl hover:shadow-sm transition-shadow"
-                >
-                  {company.logo ? (
-                    <img src={company.logo} alt={company.name} className="h-10 w-10 rounded-lg object-cover shrink-0" />
-                  ) : (
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Building2 className="h-5 w-5 text-primary" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-foreground flex items-center gap-1">
-                      {company.name}
-                      <BadgeCheck className="h-3.5 w-3.5 text-primary shrink-0" />
-                    </p>
-                    <p className="text-xs text-muted-foreground">{company.active_job_count} open position{company.active_job_count !== 1 ? 's' : ''}</p>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                </Link>
-              ))}
-            </div>
+            {tenders.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No tenders yet — check back soon.</p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {tenders.map(t => <TenderCard key={t.id} tender={t} />)}
+              </div>
+            )}
           </section>
-        )}
+        ) : (
+          <>
+            {/* Latest Private Jobs */}
+            <section>
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-xl font-bold">Latest Jobs</h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">From companies hiring right now</p>
+                </div>
+                <Link to="/jobs" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                  View all <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+              {/* Empty state vs. up to 6 latest job previews */}
+              {jobs.length === 0 ? (
+                <p className="text-muted-foreground text-sm">No jobs yet — check back soon.</p>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {jobs.map(job => <JobCard key={job.id} job={job} />)}
+                </div>
+              )}
+            </section>
 
-        {/* Freelancers */}
-        <section>
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <Users className="h-5 w-5 text-primary" /> Freelance &amp; Remote Work
-              </h2>
-              <p className="text-sm text-muted-foreground mt-0.5">Top platforms to find gigs, contracts &amp; remote jobs</p>
-            </div>
-            <Link to="/freelancers" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-              View all <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {FREELANCER_HIGHLIGHTS.map(p => (
-              <a
-                key={p.name}
-                href={p.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-border rounded-lg hover:shadow-sm transition-shadow text-sm font-medium"
-              >
-                {p.name}
-                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{p.tag}</span>
-              </a>
-            ))}
-          </div>
-        </section>
+            {/* Companies Hiring — whole section hidden until the companies fetch resolves with at least one result */}
+            {companies.length > 0 && (
+              <section>
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h2 className="text-xl font-bold flex items-center gap-2">
+                      <BadgeCheck className="h-5 w-5 text-primary" /> Companies Hiring on StepsDoor
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-0.5">Verified companies — browse open positions and apply directly</p>
+                  </div>
+                  <Link to="/companies" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                    View all <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+                {/* Only the first 6 subscribed companies are previewed here; "View all" links to /companies for the rest */}
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {companies.slice(0, 6).map(company => (
+                    <Link
+                      key={company.id}
+                      to={`/careers/${company.slug}`}
+                      className="flex items-center gap-3 p-3 bg-white border border-border rounded-xl hover:shadow-sm transition-shadow"
+                    >
+                      {company.logo ? (
+                        <img src={company.logo} alt={company.name} className="h-10 w-10 rounded-lg object-cover shrink-0" />
+                      ) : (
+                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                          <Building2 className="h-5 w-5 text-primary" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground flex items-center gap-1">
+                          {company.name}
+                          <BadgeCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+                        </p>
+                        <p className="text-xs text-muted-foreground">{company.active_job_count} open position{company.active_job_count !== 1 ? 's' : ''}</p>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Freelancers */}
+            <section>
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <Users className="h-5 w-5 text-primary" /> Freelance & Remote Work
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">Top platforms to find gigs, contracts & remote jobs</p>
+                </div>
+                <Link to="/freelancers" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                  View all <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {FREELANCER_HIGHLIGHTS.map(p => (
+                  <a
+                    key={p.name}
+                    href={p.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-border rounded-lg hover:shadow-sm transition-shadow text-sm font-medium"
+                  >
+                    {p.name}
+                    <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{p.tag}</span>
+                  </a>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
 
         {/* Services */}
         <section>
@@ -343,12 +490,25 @@ export default function Home() {
 
         {/* Shopping */}
         <section>
-          <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center justify-between mb-3">
             <div>
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <ShoppingBag className="h-5 w-5 text-primary" /> Shopping &amp; Stores
               </h2>
               <p className="text-sm text-muted-foreground mt-0.5">100+ Indian &amp; global stores across all categories</p>
+              {/* Special Offers trigger — only shown when admin has active offer FeaturedLinks */}
+              {offerLinks.length > 0 && (
+                <button
+                  onClick={() => setOffersModalOpen(true)}
+                  className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-xl text-sm font-semibold text-orange-700 hover:bg-orange-100 hover:border-orange-300 transition-colors"
+                >
+                  <Tag className="h-3.5 w-3.5 text-orange-500" />
+                  Special Offers
+                  <span className="text-xs font-normal text-orange-500">
+                    {offerLinks.length} deal{offerLinks.length !== 1 ? 's' : ''}
+                  </span>
+                </button>
+              )}
             </div>
             <Link to="/shopping" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
               View all <ArrowRight className="h-4 w-4" />
@@ -446,33 +606,9 @@ export default function Home() {
           </section>
         )}
 
-        {/* Tenders + Govt Jobs side by side */}
-        <div className="grid gap-10 lg:grid-cols-2">
-
-          {/* Tenders */}
-          <section>
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-primary" /> Government Tenders
-                </h2>
-                <p className="text-sm text-muted-foreground mt-0.5">Latest notices from official portals</p>
-              </div>
-              <Link to="/tenders" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-                View all <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-            {/* Empty state vs. up to 4 latest tender previews */}
-            {tenders.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No tenders yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {tenders.map(t => <TenderCard key={t.id} tender={t} />)}
-              </div>
-            )}
-          </section>
-
-          {/* Govt Jobs */}
+        {isContractor ? (
+          /* Contractors: show Govt Jobs full-width (tenders already shown above);
+             skip the Employer CTA since contractors aren't posting jobs. */
           <section>
             <div className="flex items-center justify-between mb-5">
               <div>
@@ -485,38 +621,89 @@ export default function Home() {
                 View all <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
-            {/* Empty state vs. up to 4 latest govt job previews */}
             {govtJobs.length === 0 ? (
               <p className="text-muted-foreground text-sm">No government jobs yet.</p>
             ) : (
-              <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {govtJobs.map(j => <GovtJobCard key={j.id} job={j} />)}
               </div>
             )}
           </section>
-        </div>
+        ) : (
+          <>
+            {/* Tenders + Govt Jobs side by side */}
+            <div className="grid gap-10 lg:grid-cols-2">
 
-        {/* Employer CTA */}
-        <section className="bg-primary rounded-2xl p-10 text-center text-primary-foreground">
-          <h2 className="text-2xl font-bold">Hiring? Post your jobs on StepsDoor</h2>
-          <p className="mt-2 text-primary-foreground/80 max-w-lg mx-auto">
-            Reach thousands of active job seekers across India. Get your own branded career page included.
-          </p>
-          <div className="mt-6 flex gap-3 justify-center">
-            <Link
-              to="/register"
-              className="px-6 py-2.5 bg-white text-primary rounded-lg text-sm font-semibold hover:bg-white/90 transition-colors"
-            >
-              Get Started Free
-            </Link>
-            <Link
-              to="/pricing"
-              className="px-6 py-2.5 border border-white/40 text-white rounded-lg text-sm font-semibold hover:bg-white/10 transition-colors"
-            >
-              View Pricing
-            </Link>
-          </div>
-        </section>
+              {/* Tenders */}
+              <section>
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h2 className="text-xl font-bold flex items-center gap-2">
+                      <FileText className="h-5 w-5 text-primary" /> Government Tenders
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-0.5">Latest notices from official portals</p>
+                  </div>
+                  <Link to="/tenders" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                    View all <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+                {/* Empty state vs. up to 4 latest tender previews */}
+                {tenders.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">No tenders yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {tenders.slice(0, 4).map(t => <TenderCard key={t.id} tender={t} />)}
+                  </div>
+                )}
+              </section>
+
+              {/* Govt Jobs */}
+              <section>
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h2 className="text-xl font-bold flex items-center gap-2">
+                      <Briefcase className="h-5 w-5 text-primary" /> Government Jobs
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-0.5">UPSC, SSC, Railways, Banking & more</p>
+                  </div>
+                  <Link to="/govt-jobs" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                    View all <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+                {/* Empty state vs. up to 4 latest govt job previews */}
+                {govtJobs.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">No government jobs yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {govtJobs.map(j => <GovtJobCard key={j.id} job={j} />)}
+                  </div>
+                )}
+              </section>
+            </div>
+
+            {/* Employer CTA — not shown to contractors since they aren't posting jobs */}
+            <section className="bg-primary rounded-2xl p-10 text-center text-primary-foreground">
+              <h2 className="text-2xl font-bold">Hiring? Post your jobs on StepsDoor</h2>
+              <p className="mt-2 text-primary-foreground/80 max-w-lg mx-auto">
+                Reach thousands of active job seekers across India. Get your own branded career page included.
+              </p>
+              <div className="mt-6 flex gap-3 justify-center">
+                <Link
+                  to="/register"
+                  className="px-6 py-2.5 bg-white text-primary rounded-lg text-sm font-semibold hover:bg-white/90 transition-colors"
+                >
+                  Get Started Free
+                </Link>
+                <Link
+                  to="/pricing"
+                  className="px-6 py-2.5 border border-white/40 text-white rounded-lg text-sm font-semibold hover:bg-white/10 transition-colors"
+                >
+                  View Pricing
+                </Link>
+              </div>
+            </section>
+          </>
+        )}
 
       </div>
     </div>

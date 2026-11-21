@@ -27,6 +27,14 @@ export const useAuthStore = create(
       // Current JWT refresh token, used to obtain a new access token when
       // the access token expires. Initial value is null (logged out).
       refreshToken: null,
+      // Whether Zustand's persist middleware has finished rehydrating from
+      // localStorage. Starts false; set to true by onRehydrateStorage below.
+      // Read by ProtectedRoute to avoid redirecting to /login during the brief
+      // window before the stored session is loaded (Zustand v5 defers hydration
+      // to a microtask even for synchronous storage like localStorage).
+      _hasHydrated: false,
+      // Setter called by onRehydrateStorage once rehydration completes.
+      setHasHydrated: (val) => set({ _hasHydrated: val }),
       /**
        * Establishes a session: writes both tokens to localStorage (the
        * source of truth read by the Axios request interceptor in
@@ -66,13 +74,20 @@ export const useAuthStore = create(
     // zustand/persist config: persists this store to localStorage under the
     // key 'auth-storage' so the session survives a page refresh. `partialize`
     // limits what's persisted to user/token/refreshToken (excludes any
-    // future transient/derived state from being serialized). Note this is a
-    // *second*, separate persistence path from the raw
+    // future transient/derived state like _hasHydrated from being serialized).
+    // Note this is a *second*, separate persistence path from the raw
     // localStorage['access_token']/['refresh_token'] keys written in
     // setAuth/logout above — those are read directly by the Axios
     // interceptor in `services/api.js`, while this `auth-storage` entry is
     // zustand's own rehydration mechanism for restoring `user`/`token`/
     // `refreshToken` into the store on app load.
-    { name: 'auth-storage', partialize: (s) => ({ user: s.user, token: s.token, refreshToken: s.refreshToken }) }
+    // `onRehydrateStorage` fires once the stored session has been merged back
+    // into the store, flipping `_hasHydrated` so ProtectedRoute stops
+    // blocking route evaluation.
+    {
+      name: 'auth-storage',
+      partialize: (s) => ({ user: s.user, token: s.token, refreshToken: s.refreshToken }),
+      onRehydrateStorage: () => (state) => { state?.setHasHydrated(true) },
+    }
   )
 )

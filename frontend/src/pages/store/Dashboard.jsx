@@ -34,7 +34,13 @@ export default function StoreDashboard() {
   useEffect(() => {
     Promise.all([
       storeService.getMe().then(r => setStore(r.data)).catch(() => {}),
-      subscriptionService.current().then(r => setSub(r.data)).catch(() => {}),
+      // The subscriptions endpoint returns { active: false } when there is no
+      // active subscription (no `status` or `end_date` fields), or
+      // { active: true, subscription: { status, end_date, ... } } when active.
+      // Extract the nested subscription object so `sub` is either a proper
+      // subscription record (with `status`/`end_date`) or null — never the bare
+      // `{ active: false }` shape that would crash the template below.
+      subscriptionService.current().then(r => setSub(r.data?.subscription ?? null)).catch(() => {}),
     ]).finally(() => setLoading(false))
   }, [])
 

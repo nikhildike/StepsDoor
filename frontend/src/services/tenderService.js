@@ -57,6 +57,17 @@ export const tenderService = {
   createAlert: (data) => api.post('/tenders/alerts/', data),
 
   /**
+   * Partially updates an existing tender alert (e.g. toggling is_active).
+   *
+   * Endpoint: PATCH /tenders/alerts/{id}/
+   * @param {string|number} id - Alert id.
+   * @param {Object} data - Fields to update (e.g. `{ is_active: false }`).
+   * @returns {Promise} Axios response promise resolving to the updated TenderAlert.
+   * Used by: `pages/seeker/Alerts.jsx`.
+   */
+  updateAlert: (id, data) => api.patch(`/tenders/alerts/${id}/`, data),
+
+  /**
    * Deletes a tender alert.
    *
    * Endpoint: DELETE /tenders/alerts/{id}/

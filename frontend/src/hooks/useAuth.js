@@ -31,12 +31,14 @@ export function useAuth() {
   const navigate = useNavigate()
 
   // Routes the user to the correct home surface based on account type:
-  // store owners -> /store, company accounts -> /dashboard, otherwise
-  // treat as a job seeker -> /seeker. Order matters: store owners are
-  // also flagged is_company, so this check must run before the company check.
+  // store owners -> /store, company accounts -> /dashboard, contractors
+  // -> /tenders (their primary content), otherwise treat as a job seeker
+  // -> /seeker. Order matters: store owners are also flagged is_company,
+  // so that check must run before the company check.
   const redirectAfterAuth = useCallback((user) => {
     if (user.is_store_owner) navigate('/store')
     else if (user.is_company) navigate('/dashboard')
+    else if (user.is_contractor) navigate('/tenders')
     else navigate('/seeker')
   }, [navigate])
 

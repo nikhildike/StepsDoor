@@ -42,12 +42,11 @@ export default function Navbar() {
   const { signOut } = useAuth()
   const { theme, toggle } = useTheme()
   // Role flags derived from the signed-in user (all false/undefined for anonymous visitors)
-  const isSeeker     = token && user && !user.is_company && !user.is_store_owner
-  const isCompany    = token && user?.is_company
-  const isStoreOwner = token && user?.is_store_owner
+  const isSeeker  = token && user && !user.is_company && !user.is_store_owner
+  const isCompany = token && user?.is_company
 
   // Hide company-only links (Pricing) from seekers and store owners
-  const links = NAV_LINKS.filter(l => !(l.companyOnly && (isSeeker || isStoreOwner)))
+  const links = NAV_LINKS.filter(l => !(l.companyOnly && (isSeeker || (token && user?.is_store_owner))))
 
   return (
     <header className="hidden md:block border-b bg-white sticky top-0 z-50">
@@ -68,8 +67,7 @@ export default function Navbar() {
           {/* Auth actions: role-aware shortcuts + sign out when authenticated, sign in / post-a-job CTA otherwise */}
           {token ? (
             <>
-              {isCompany    && <Link to="/dashboard" className="text-sm font-medium text-primary hover:underline">Dashboard</Link>}
-              {isStoreOwner && <Link to="/store"     className="text-sm font-medium text-primary hover:underline">My Store</Link>}
+              {isCompany && <Link to="/dashboard" className="text-sm font-medium text-primary hover:underline">Dashboard</Link>}
               <button onClick={signOut} className="text-sm text-muted-foreground hover:text-foreground">Sign out</button>
             </>
           ) : (

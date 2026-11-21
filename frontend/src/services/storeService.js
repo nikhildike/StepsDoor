@@ -72,4 +72,17 @@ export const storeService = {
    * Used by: a store detail/listing page (on outbound click).
    */
   click: (id) => api.post(`/stores/${id}/click/`),
+
+  /**
+   * Lists active admin-curated featured links (standalone offer/shopping
+   * links not tied to any Store — pasted directly in Django admin).
+   *
+   * Endpoint: GET /stores/featured-links/
+   * @param {Object} [params] - Optional filters: `page` ('shopping'|'retail'|'both'),
+   *   `type` ('offer'|'shopping').
+   * @returns {Promise} Axios response promise resolving to a list of FeaturedLink objects.
+   * Used by: Shopping.jsx and RetailStores.jsx to merge into the Special Offers modal
+   *   and shopping-link chips without requiring a Store entry.
+   */
+  listFeaturedLinks: (params) => api.get('/stores/featured-links/', { params }),
 }

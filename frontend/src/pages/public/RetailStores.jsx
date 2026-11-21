@@ -426,7 +426,7 @@ function SpecialOffersModal({ entries, onClose }) {
         {/* Scrollable offer list */}
         <div className="overflow-y-auto p-5">
           <div className="grid sm:grid-cols-2 gap-3">
-            {entries.map(({ url, storeName, storeLogo, storeId }, idx) => {
+            {entries.map(({ url, storeName, storeLogo, storeId, description }, idx) => {
               // Extract a readable hostname label (e.g. "www.amazon.in" → "amazon.in")
               let hostLabel = url
               try { hostLabel = new URL(url).hostname.replace(/^www\./, '') } catch { /* keep raw url */ }
@@ -447,7 +447,10 @@ function SpecialOffersModal({ entries, onClose }) {
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold text-orange-900 truncate leading-tight">{storeName}</p>
-                    <p className="text-[11px] text-orange-600 truncate leading-tight">{hostLabel}</p>
+                    {/* Show description if set, otherwise fall back to the hostname */}
+                    <p className="text-[11px] text-orange-600 truncate leading-tight">
+                      {description || hostLabel}
+                    </p>
                   </div>
                   <ExternalLink className="h-3.5 w-3.5 text-orange-400 group-hover:text-orange-600 shrink-0 transition-colors" />
                 </a>
@@ -468,25 +471,36 @@ function SpecialOffersModal({ entries, onClose }) {
 export default function RetailStores() {
   const [activeCategory, setActiveCategory] = useState('all') // which static-directory category is shown ('all' or a RETAIL_GROUPS id)
   const [subscribedStores, setSubscribedStores] = useState([]) // live StepsDoor storefront subscribers fetched below
+  const [featuredLinks, setFeaturedLinks] = useState([]) // admin-curated standalone featured links (no Store required)
   const [search, setSearch] = useState('') // search box value — spans both subscribed and static-directory stores
   const [offersModalOpen, setOffersModalOpen] = useState(false) // controls the Special Offers modal
 
-  // Fetch StepsDoor's actual retail-store subscribers once on mount; silently
-  // ignore failures so the static directory below still renders regardless.
+  // Fetch StepsDoor's actual retail-store subscribers and admin-curated featured links
+  // once on mount; silently ignore failures so the static directory still renders.
   useEffect(() => {
     storeService.listRetail().then(({ data }) => setSubscribedStores(data.results ?? data)).catch(() => {})
+    storeService.listFeaturedLinks({ target_page: 'retail' })
+      .then(({ data }) => setFeaturedLinks(data.results ?? data))
+      .catch(() => {})
   }, [])
 
   // Parse every `offers_links` field (newline-separated URLs) from subscribed
-  // retail stores into a flat array for the modal.
-  const offerEntries = subscribedStores.flatMap(store => {
-    if (!store.offers_links) return []
-    return store.offers_links
-      .split('\n')
-      .map(line => line.trim())
-      .filter(Boolean)
-      .map(url => ({ url, storeName: store.name, storeLogo: store.logo, storeId: store.id }))
-  })
+  // retail stores into a flat array for the modal, then append any standalone
+  // admin-curated FeaturedLink offer entries.
+  const offerEntries = [
+    ...subscribedStores.flatMap(store => {
+      if (!store.offers_links) return []
+      return store.offers_links
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(url => ({ url, storeName: store.name, storeLogo: store.logo, storeId: store.id, description: '' }))
+    }),
+    // Standalone FeaturedLink offer entries (not tied to any Store)
+    ...featuredLinks
+      .filter(fl => fl.link_type === 'offer')
+      .map(fl => ({ url: fl.url, storeName: fl.label, storeLogo: fl.logo || null, storeId: `fl-${fl.id}`, description: fl.description || '' })),
+  ]
 
   const visibleGroups = activeCategory === 'all'
     ? RETAIL_GROUPS

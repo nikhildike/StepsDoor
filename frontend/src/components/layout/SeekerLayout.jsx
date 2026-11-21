@@ -1,44 +1,65 @@
 /**
  * SeekerLayout.jsx
  *
- * Page shell for the job-seeker account section (routes under /seeker/*:
- * Overview, Saved Jobs, Job Alerts, My Profile). Renders a persistent
- * sidebar nav on desktop and a collapsible drawer nav on mobile, showing the
- * signed-in seeker's email, and renders the active seeker page via
- * <Outlet />. Used as the layout route element for seeker-only pages.
+ * Page shell for the account section (routes under /seeker/*). Shared by job
+ * seekers and contractors; the sidebar nav items and role label adapt to the
+ * signed-in user's role:
+ *
+ *   Job seeker:  Dashboard · Saved Jobs  · Job Alerts    · My Profile
+ *   Contractor:  Dashboard · Tenders     · Tender Alerts · My Profile
+ *
+ * The sidebar starts open on page load and auto-collapses after 5 seconds.
+ * A burger button in the persistent top bar re-opens it (and resets the
+ * 5-second timer) at any time. The sidebar overlays content rather than
+ * pushing it so the main area always uses the full viewport width.
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
-import { LayoutDashboard, Bookmark, Bell, User, LogOut, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Bookmark, Bell, User, LogOut, Menu, X, FileText, ShoppingBag, Store, Wrench } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
-// Sidebar navigation entries for the seeker account section.
-// `end: true` on Overview ensures it's only active on an exact /seeker match.
-const navItems = [
-  { to: '/seeker',         label: 'Overview',   icon: LayoutDashboard, end: true },
-  { to: '/seeker/saved',   label: 'Saved Jobs', icon: Bookmark },
-  { to: '/seeker/alerts',  label: 'Job Alerts', icon: Bell },
-  { to: '/seeker/profile', label: 'My Profile', icon: User },
+// Browse links shown to all roles — public pages accessible from any account type.
+const BROWSE_NAV = [
+  { to: '/shopping',      label: 'Shopping',      icon: ShoppingBag },
+  { to: '/retail-stores', label: 'Retail Stores', icon: Store },
+  { to: '/services',      label: 'Services',      icon: Wrench },
+]
+
+// Nav items shown to job seekers.
+const SEEKER_NAV = [
+  { to: '/seeker',         label: 'Dashboard',     icon: LayoutDashboard, end: true },
+  { to: '/seeker/saved',   label: 'Saved Jobs',    icon: Bookmark },
+  { to: '/seeker/alerts',  label: 'Job Alerts',    icon: Bell },
+  { to: '/seeker/profile', label: 'My Profile',    icon: User },
+]
+
+// Nav items shown to contractors — tender-focused, no saved-jobs entry.
+// "Tenders" links to /seeker/tenders so the sidebar stays visible (that
+// route renders the public Tenders page inside the seeker layout).
+const CONTRACTOR_NAV = [
+  { to: '/seeker',          label: 'Dashboard',     icon: LayoutDashboard, end: true },
+  { to: '/seeker/tenders',  label: 'Tenders',       icon: FileText },
+  { to: '/seeker/alerts',   label: 'Tender Alerts', icon: Bell },
+  { to: '/seeker/profile',  label: 'My Profile',    icon: User },
 ]
 
 /**
  * SidebarContent
  *
- * Internal helper rendering the nav links, signed-in user's email, and
- * sign-out button shared by both the desktop sidebar <aside> and the mobile
- * slide-out drawer in SeekerLayout below.
+ * Renders the nav links, signed-in user email, and Sign Out button inside
+ * the collapsible sidebar panel.
  *
- * Props:
- * - user (object | null) — signed-in seeker; used to display their email.
- * - signOut (function) — logs the current seeker out; wired to the Sign Out button.
- * - onClose (function) — called after a nav link is clicked, used to close the mobile drawer.
+ * @param {{ user: object|null, signOut: function, onClose: function, navItems: Array }} props
+ *   - user     — signed-in user; email shown above Sign Out.
+ *   - signOut  — clears auth and navigates to /login.
+ *   - onClose  — called when a nav link is clicked to collapse the sidebar.
+ *   - navItems — role-appropriate nav list (SEEKER_NAV or CONTRACTOR_NAV).
  */
-function SidebarContent({ user, signOut, onClose }) {
+function SidebarContent({ user, signOut, onClose, navItems }) {
   return (
     <>
-      <nav className="flex-1 p-4 space-y-1">
-        {/* Render each nav item, highlighting the active route via NavLink's isActive */}
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
@@ -56,9 +77,29 @@ function SidebarContent({ user, signOut, onClose }) {
             {label}
           </NavLink>
         ))}
+
+        {/* Browse section — public pages accessible from any account type */}
+        <div className="pt-3 pb-1">
+          <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Browse</p>
+        </div>
+        {BROWSE_NAV.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            onClick={onClose}
+            className={({ isActive }) => cn(
+              'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              isActive
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </NavLink>
+        ))}
       </nav>
       <div className="p-4 border-t space-y-1">
-        {/* Show the signed-in seeker's email above the sign-out button, when available */}
         {user && (
           <p className="px-3 py-1 text-xs text-muted-foreground truncate">{user.email}</p>
         )}
@@ -77,68 +118,97 @@ function SidebarContent({ user, signOut, onClose }) {
 /**
  * SeekerLayout
  *
- * Layout route for the job-seeker account section. Renders a fixed sidebar
- * (desktop) or a toggleable slide-out drawer (mobile) with navigation, and
- * renders the matched child route in the main content area via <Outlet />.
+ * Layout route for /seeker/* pages. Renders a persistent top bar (burger
+ * button + branding) and a slide-over sidebar that:
+ *   - Opens on mount
+ *   - Auto-collapses after 5 seconds
+ *   - Can be re-opened (or closed) at any time via the burger button
+ *   - Closes immediately on route change (nav link click)
  *
- * Props: none — reads the signed-in seeker from useAuth and the current
- * route from useLocation.
+ * The sidebar overlays the content area (does not push it), so the main
+ * content always occupies the full width.
  *
- * Used as the parent layout element for all /seeker/* routes, e.g. wraps
- * SavedJobs, Alerts, Profile pages in the router config.
+ * Props: none — reads auth state from useAuth and current route from useLocation.
  */
 export default function SeekerLayout() {
   const { user, signOut } = useAuth()
   const location = useLocation()
-  const [open, setOpen] = useState(false)
+  // Sidebar starts open so users immediately see the nav on first load.
+  const [open, setOpen] = useState(true)
+  // Ref holds the auto-collapse timer so it can be cleared on re-open.
+  const timerRef = useRef(null)
 
-  // Auto-close the mobile drawer whenever the route changes
+  const isContractor = !!user?.is_contractor
+  const navItems = isContractor ? CONTRACTOR_NAV : SEEKER_NAV
+  const roleLabel = isContractor ? 'Contractor' : 'Job Seeker'
+
+  // Whenever the sidebar opens, start (or restart) the 5-second auto-collapse timer.
+  useEffect(() => {
+    clearTimeout(timerRef.current)
+    if (open) {
+      timerRef.current = setTimeout(() => setOpen(false), 5000)
+    }
+    return () => clearTimeout(timerRef.current)
+  }, [open])
+
+  // Collapse immediately on route change (user tapped a nav link).
   useEffect(() => { setOpen(false) }, [location.pathname])
 
+  // Toggle handler: flipping open will trigger the useEffect above to
+  // restart the 5-second timer.
+  const toggleSidebar = () => setOpen(o => !o)
+
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-gray-50">
 
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-64 bg-white border-r flex-col">
-        <div className="p-6 border-b">
-          <span className="text-xl font-bold text-primary">StepsDoor</span>
-          <p className="text-xs text-muted-foreground mt-1">Job Seeker</p>
+      {/* Persistent top bar — visible at all screen sizes */}
+      <header className="flex items-center px-4 h-14 bg-white border-b shrink-0 z-30">
+        {/* Burger button: opens the sidebar and resets the 5-second timer */}
+        <button
+          onClick={toggleSidebar}
+          className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          aria-label={open ? 'Close menu' : 'Open menu'}
+        >
+          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
+        <div className="ml-3">
+          <span className="text-lg font-bold text-primary">StepsDoor</span>
+          <span className="ml-2 text-xs text-muted-foreground">{roleLabel}</span>
         </div>
-        <SidebarContent user={user} signOut={signOut} onClose={() => {}} />
-      </aside>
+      </header>
 
-      <div className="flex flex-col flex-1 min-w-0">
+      {/* Body: sidebar overlay + main content */}
+      <div className="relative flex flex-1 min-h-0">
 
-        {/* Mobile top bar */}
-        <header className="md:hidden flex items-center justify-between px-4 h-14 bg-white border-b shrink-0">
-          <div>
-            <span className="text-lg font-bold text-primary">StepsDoor</span>
-            <span className="ml-2 text-xs text-muted-foreground">Job Seeker</span>
-          </div>
-          {/* Toggles the mobile drawer open/closed; icon swaps between hamburger and close */}
-          <button
-            onClick={() => setOpen(o => !o)}
-            className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            aria-label="Toggle menu"
-          >
-            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
-        </header>
-
-        {/* Mobile drawer — only rendered while open; backdrop click closes it */}
+        {/* Backdrop — dims the content area while the sidebar is open;
+            clicking it collapses the sidebar immediately */}
         {open && (
-          <>
-            <div
-              className="fixed inset-0 z-40 bg-black/30 md:hidden"
-              onClick={() => setOpen(false)}
-            />
-            <div className="fixed top-14 left-0 bottom-0 z-40 w-64 bg-white border-r flex flex-col shadow-xl md:hidden overflow-y-auto">
-              <SidebarContent user={user} signOut={signOut} onClose={() => setOpen(false)} />
-            </div>
-          </>
+          <div
+            className="fixed inset-0 z-20 bg-black/30 top-14"
+            onClick={() => setOpen(false)}
+          />
         )}
 
-        {/* Active seeker child route (SavedJobs, Alerts, Profile, etc.) renders here */}
+        {/* Slide-over sidebar — translates in from the left when open */}
+        <aside
+          className={cn(
+            'fixed top-14 left-0 bottom-0 z-30 w-64 bg-white border-r flex flex-col shadow-xl transition-transform duration-200',
+            open ? 'translate-x-0' : '-translate-x-full'
+          )}
+        >
+          <div className="p-5 border-b">
+            <span className="text-base font-bold text-primary">StepsDoor</span>
+            <p className="text-xs text-muted-foreground mt-0.5">{roleLabel}</p>
+          </div>
+          <SidebarContent
+            user={user}
+            signOut={signOut}
+            onClose={() => setOpen(false)}
+            navItems={navItems}
+          />
+        </aside>
+
+        {/* Main content — always full width since sidebar overlays */}
         <main className="flex-1 overflow-auto p-4 md:p-8">
           <Outlet />
         </main>

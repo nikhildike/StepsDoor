@@ -14,9 +14,16 @@ import { useAuth } from '@/hooks/useAuth'
 import { useAuthStore } from '@/store/authStore'
 import {
   LayoutDashboard, Briefcase, PlusCircle, BarChart2,
-  CreditCard, FileText, Building2, LogOut, Menu, X, Store,
+  CreditCard, FileText, Building2, LogOut, Menu, X, Store, ShoppingBag, Wrench,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
+
+// Browse links shown in every authenticated sidebar — public pages any role can visit.
+const BROWSE_NAV = [
+  { to: '/shopping',      label: 'Shopping',      icon: ShoppingBag },
+  { to: '/retail-stores', label: 'Retail Stores', icon: Store },
+  { to: '/services',      label: 'Services',      icon: Wrench },
+]
 
 // Primary sidebar navigation entries for the company dashboard.
 // `end: true` on the Dashboard home item ensures NavLink only marks it
@@ -47,7 +54,7 @@ const navItems = [
 function SidebarContent({ signOut, onClose, isStoreOwner }) {
   return (
     <>
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {/* Render each primary nav item, highlighting the active route via NavLink's isActive */}
         {navItems.map(({ to, label, icon: Icon, end }) => (
           <NavLink
@@ -58,6 +65,27 @@ function SidebarContent({ signOut, onClose, isStoreOwner }) {
             className={({ isActive }) => cn(
               'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
               // Active route gets the solid primary-color pill; inactive routes get the muted hover style
+              isActive
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </NavLink>
+        ))}
+
+        {/* Browse section — public pages accessible from any account type */}
+        <div className="pt-3 pb-1">
+          <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Browse</p>
+        </div>
+        {BROWSE_NAV.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            onClick={onClose}
+            className={({ isActive }) => cn(
+              'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
               isActive
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
