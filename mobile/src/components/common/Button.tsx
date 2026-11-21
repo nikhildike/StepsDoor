@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle } from 'react-native';
-import { Colors } from '@/theme/colors';
+import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 
@@ -44,6 +44,8 @@ interface Props {
  * Props: see `Props` interface above.
  */
 export function Button({ onPress, title, variant = 'primary', loading, disabled, style }: Props) {
+  const Colors = useThemeColors();
+  const styles = makeStyles(Colors);
   // Button is non-interactive while explicitly disabled OR while a request is in flight (loading).
   const isDisabled = disabled || loading;
 
@@ -73,7 +75,7 @@ export function Button({ onPress, title, variant = 'primary', loading, disabled,
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   base: {
     height: 48,
     borderRadius: BorderRadius.md,

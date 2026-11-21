@@ -13,18 +13,40 @@
  * share "localhost" with the host machine the way a browser dev server does.
  */
 import axios from 'axios';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-// The Android emulator runs in its own virtual network, so `localhost`
-// inside the emulator refers to the emulator itself, not the host machine
-// running the Django dev server. The emulator's virtual router reserves
-// 10.0.2.2 as an alias for the host machine's loopback interface, so that
-// address (not 127.0.0.1/localhost) is what reaches `manage.py runserver`
-// on the developer's PC. iOS simulators do not have this problem (they
-// share the host's network stack), but this app currently targets the
-// Android emulator only.
-const API_URL = 'http://10.0.2.2:8000/api'; // Android emulator → localhost
-// For physical device: replace with your machine's LAN IP e.g. http://192.168.1.x:8000/api
+// None of the dev targets this app runs on share "localhost" with the host
+// machine running the Django dev server (or, for web, they do — just not
+// via `expo-constants`), so the API host has to be derived per-platform:
+// - Web (`npm run web` / pressing `w`): runs as a normal page in the
+//   browser on the dev machine, so `window.location.hostname` (the same
+//   host:port the page itself was loaded from) is exactly right. Note
+//   `Constants.expoConfig?.hostUri` is NEVER populated on web — it only
+//   comes from `@expo/cli`'s native manifest — so relying on it here would
+//   silently target the wrong host on every web request.
+// - Android emulator (launched via `adb`, no LAN involved): the emulator's
+//   virtual router reserves 10.0.2.2 as an alias for the host machine's
+//   loopback interface.
+// - Physical device via Expo Go (scanning the QR code over LAN/tunnel):
+//   Metro's `hostUri` (e.g. "192.168.1.42:8081") already contains the exact
+//   LAN IP the device used to reach the dev machine, so reusing that host
+//   for the Django port (8000) reaches the same machine reliably without
+//   hardcoding a specific IP that changes with every network.
+function resolveApiHost(): string {
+  if (Platform.OS === 'web') {
+    return typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  }
+  const hostUri = Constants.expoConfig?.hostUri; // e.g. "192.168.1.42:8081" or "localhost:8081"
+  const host = hostUri?.split(':')[0];
+  if (host && host !== 'localhost' && host !== '127.0.0.1') {
+    return host; // physical device over LAN/tunnel — reuse Metro's LAN IP
+  }
+  return '10.0.2.2'; // emulator (or hostUri unavailable) — alias for the host machine
+}
+
+const API_URL = `http://${resolveApiHost()}:8000/api`;
 
 // Single shared Axios instance, configured once and reused everywhere.
 // - baseURL: prefixes every request made through `api` with API_URL, so
@@ -74,7 +96,7 @@ api.interceptors.response.use(
         return api(original);
       } catch {
         // Refresh token is invalid/expired too — clear stored credentials
-        // so the app falls back to its logged-out state (AuthNavigator).
+        // so the app falls back to its logged-out state (guest browsing).
         await AsyncStorage.multiRemove(['access_token', 'refresh_token']);
       }
     }

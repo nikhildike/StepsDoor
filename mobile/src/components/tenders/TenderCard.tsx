@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Colors } from '@/theme/colors';
+import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Badge } from '@/components/common/Badge';
@@ -53,6 +53,8 @@ interface Props {
  * Props: see `Props` interface above.
  */
 export function TenderCard({ tender, onPress }: Props) {
+  const Colors = useThemeColors();
+  const styles = makeStyles(Colors);
   // Format the raw ISO deadline into a localized "D Mon YYYY" string for
   // display; null when no deadline was provided by the API.
   const deadline = tender.submission_deadline
@@ -96,7 +98,7 @@ export function TenderCard({ tender, onPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   card: {
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,

@@ -27,6 +27,17 @@ export const jobService = {
    */
   get: (id: number) => api.get(`/jobs/${id}/`),
   /**
+   * Records an "Apply" click (for the company's analytics) and returns
+   * the job's redirect URL to open.
+   * @param id - Job's numeric id.
+   * @returns Axios response with `{ redirect_url }`.
+   * @remarks Called right before opening `redirect_url` from the Job
+   *   detail screen or a company's careers page, so the click is logged
+   *   even though there's no in-app application flow. Falls back to the
+   *   job record's own `redirect_url` if this call fails, so Apply never breaks.
+   */
+  trackClick: (id: number) => api.post(`/jobs/${id}/track-click/`),
+  /**
    * List the signed-in job seeker's saved/bookmarked jobs.
    * @returns Axios response with the user's saved job entries.
    * @remarks Used by the seeker's Saved Jobs screen.

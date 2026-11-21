@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Colors } from '@/theme/colors';
+import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Badge } from '@/components/common/Badge';
@@ -63,6 +63,8 @@ interface Props {
  * Props: see `Props` interface above.
  */
 export function JobCard({ job, onPress }: Props) {
+  const Colors = useThemeColors();
+  const styles = makeStyles(Colors);
   return (
     // Card press -> fires onPress, which the caller wires up to navigate
     // to JobDetailScreen (e.g. navigation.navigate('JobDetail', { id: job.id })).
@@ -85,7 +87,7 @@ export function JobCard({ job, onPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   card: {
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,

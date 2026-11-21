@@ -12,7 +12,7 @@ import { Button } from '@/components/common/Button';
 import { Spinner } from '@/components/common/Spinner';
 import { Badge } from '@/components/common/Badge';
 import { ScreenWrapper } from '@/components/common/ScreenWrapper';
-import { Colors } from '@/theme/colors';
+import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { Spacing } from '@/theme/spacing';
 
@@ -28,6 +28,8 @@ export function TenderDetailScreen({ route }: { route: any }) {
   const { tenderId } = route.params;
   const [tender, setTender] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const Colors = useThemeColors();
+  const styles = makeStyles(Colors);
 
   // Fetches the full tender record from GET /tenders/{tenderId}/ whenever
   // tenderId changes, clearing the loading state once the request settles.
@@ -89,7 +91,7 @@ export function TenderDetailScreen({ route }: { route: any }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: { padding: Spacing[5] },
   title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.text },
   org: { fontSize: FontSize.base, color: Colors.textSecondary, marginTop: Spacing[1] },

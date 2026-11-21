@@ -2,8 +2,9 @@
  * JobDetailScreen.tsx
  *
  * Full-detail view for a single private job listing. Belongs to the Jobs
- * tab's stack navigator (and is also reachable from the Search tab and
- * SavedJobsScreen), pushed when a job card is tapped.
+ * tab's stack navigator (and is also reachable from the Home tab's
+ * search results/latest-jobs feed, and SavedJobsScreen), pushed when a
+ * job card is tapped.
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Linking } from 'react-native';
@@ -12,7 +13,7 @@ import { Button } from '@/components/common/Button';
 import { Spinner } from '@/components/common/Spinner';
 import { Badge } from '@/components/common/Badge';
 import { ScreenWrapper } from '@/components/common/ScreenWrapper';
-import { Colors } from '@/theme/colors';
+import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { Spacing } from '@/theme/spacing';
 
@@ -26,12 +27,15 @@ const JOB_TYPE_LABELS: Record<string, string> = {
  * "Apply Now" action that redirects to the company's own careers page.
  * Reads `route.params.jobId` (the job's numeric id) to fetch the record.
  * Use case: destination screen when a job seeker taps a listing from
- * `HomeScreen`, `SearchScreen`, or `SavedJobsScreen`.
+ * `HomeScreen`, `HomeTabScreen`'s search results/latest-jobs feed, or
+ * `SavedJobsScreen`.
  */
 export function JobDetailScreen({ route }: { route: any }) {
   const { jobId } = route.params;
   const [job, setJob] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const Colors = useThemeColors();
+  const styles = makeStyles(Colors);
 
   // Fetches the full job record from GET /jobs/{jobId}/ whenever jobId
   // changes, clearing the loading state once the request settles.
@@ -43,6 +47,20 @@ export function JobDetailScreen({ route }: { route: any }) {
   if (loading) return <Spinner />;
   // Defensive guard: render nothing if the job failed to load (e.g. 404)
   if (!job) return null;
+
+  // Apply action: records the click (for the company's analytics
+  // dashboard) via jobService.trackClick, then opens the returned
+  // redirect URL; falls back to the job record's own redirect_url if
+  // tracking fails, so Apply never breaks. This app never hosts an
+  // application form — it always redirects to the company's own careers page.
+  const handleApply = async () => {
+    try {
+      const { data } = await jobService.trackClick(job.id);
+      await Linking.openURL(data.redirect_url);
+    } catch {
+      await Linking.openURL(job.redirect_url);
+    }
+  };
 
   return (
     <ScreenWrapper>
@@ -62,19 +80,14 @@ export function JobDetailScreen({ route }: { route: any }) {
             rendering as plain text */}
         <Text style={styles.description}>{job.description?.replace(/<[^>]*>/g, '') || ''}</Text>
         <View style={styles.applyButton}>
-          {/* Apply action: this app never hosts an application form — it
-              redirects the job seeker to the company's own careers page */}
-          <Button
-            title="Apply Now →"
-            onPress={() => Linking.openURL(job.redirect_url)}
-          />
+          <Button title="Apply Now →" onPress={handleApply} />
         </View>
       </ScrollView>
     </ScreenWrapper>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: { padding: Spacing[5] },
   title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.text },
   company: { fontSize: FontSize.base, color: Colors.textSecondary, marginTop: Spacing[1] },

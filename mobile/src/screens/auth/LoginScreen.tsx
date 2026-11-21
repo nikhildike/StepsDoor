@@ -2,15 +2,17 @@
  * LoginScreen.tsx
  *
  * Job-seeker sign-in screen: username/password form with inline validation
- * errors. Belongs to `AuthNavigator`'s stack (Login → Register), which
- * `RootNavigator` renders while there is no stored auth token. Submitting
- * successfully triggers `useAuth().login`, which persists the token and lets
- * `RootNavigator` switch over to `AppNavigator`.
+ * errors. Belongs to `AuthNavigator`'s stack (Login → Register), reached by
+ * navigating to the root stack's "Auth" screen (e.g. from `ProfileScreen`'s
+ * guest prompt) — browsing the app itself never requires signing in.
+ * Submitting successfully triggers `useAuth().login`, then dismisses the
+ * "Auth" screen via the parent navigator so the user lands back on
+ * `AppNavigator` wherever they left off.
  */
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
-import { Colors } from '@/theme/colors';
+import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 import { Input } from '@/components/common/Input';
@@ -40,14 +42,26 @@ export function LoginScreen({ navigation }: Props) {
   const { login } = useAuth();
   const [error, setError] = useState('');
   const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>();
+  const Colors = useThemeColors();
+  const styles = makeStyles(Colors);
 
   // Form submit handler (wired via handleSubmit below). Fires when the user
   // taps "Sign in" and client-side validation passes. Attempts login with the
-  // entered credentials and surfaces a generic error message on failure.
+  // entered credentials, surfaces a generic error message on failure, and on
+  // success dismisses the "Auth" screen (on the parent/root stack). Contractor
+  // accounts are deep-linked to the Tenders tab on landing (they have no use
+  // for Jobs); all other roles return to whichever App tab the user was on.
   const onSubmit = async (data: FormData) => {
     try {
       setError('');
-      await login(data);
+      const result = await login(data);
+      if (result.user?.is_contractor) {
+        // Navigate the root stack to App and focus the Tenders tab so the
+        // contractor lands directly on the content most relevant to them.
+        navigation.getParent()?.navigate('App', { screen: 'Tenders' });
+      } else {
+        navigation.getParent()?.goBack();
+      }
     } catch {
       setError('Invalid email or password. Please try again.');
     }
@@ -114,7 +128,7 @@ export function LoginScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: { flexGrow: 1, padding: Spacing[6], justifyContent: 'center' },
   title: { fontSize: FontSize['2xl'], fontWeight: FontWeight.bold, color: Colors.text },
   subtitle: { fontSize: FontSize.base, color: Colors.textSecondary, marginTop: 4, marginBottom: Spacing[6] },

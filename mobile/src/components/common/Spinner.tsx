@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import { Colors } from '@/theme/colors';
+import { useThemeColors } from '@/theme/colors';
 
 /**
  * Spinner
@@ -19,6 +19,7 @@ import { Colors } from '@/theme/colors';
  *    directly to `ActivityIndicator`'s `size` prop.
  */
 export function Spinner({ size = 'large' }: { size?: 'small' | 'large' }) {
+  const Colors = useThemeColors();
   return (
     <View style={styles.container}>
       <ActivityIndicator size={size} color={Colors.primary} />

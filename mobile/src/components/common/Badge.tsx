@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Colors } from '@/theme/colors';
+import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 
@@ -19,18 +19,6 @@ interface Props {
   label: string;
   variant?: 'primary' | 'success' | 'warning' | 'error';
 }
-
-// Background/text color pairs per variant. `primary` colors come from the
-// theme (`Colors.primaryLight` / `Colors.primary`); the success/warning/error
-// backgrounds are fixed hex tints paired with their theme text colors
-// (Colors.success / Colors.warning / Colors.error) since no matching
-// "light" background tokens exist in the theme module.
-const variantColors = {
-  primary: { bg: Colors.primaryLight, text: Colors.primary },
-  success: { bg: '#D1FAE5', text: Colors.success },
-  warning: { bg: '#FEF3C7', text: Colors.warning },
-  error: { bg: '#FEE2E2', text: Colors.error },
-};
 
 /**
  * Badge
@@ -46,8 +34,21 @@ const variantColors = {
  * anywhere else a small color-coded status label is needed.
  */
 export function Badge({ label, variant = 'primary' }: Props) {
-  // Resolve the background/text colors for the requested variant.
+  const Colors = useThemeColors();
+  // Background/text color pairs per variant. `primary` colors come from
+  // the theme (`Colors.primaryLight` / `Colors.primary`); the
+  // success/warning/error backgrounds are fixed hex tints paired with
+  // their theme text colors since no matching "light" background tokens
+  // exist in the palette. Computed per-render (not module-level) since
+  // it depends on the active theme's Colors.
+  const variantColors = {
+    primary: { bg: Colors.primaryLight, text: Colors.primary },
+    success: { bg: '#D1FAE5', text: Colors.success },
+    warning: { bg: '#FEF3C7', text: Colors.warning },
+    error: { bg: '#FEE2E2', text: Colors.error },
+  };
   const { bg, text } = variantColors[variant];
+  const styles = makeStyles(Colors);
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       <Text style={[styles.text, { color: text }]}>{label}</Text>
@@ -55,7 +56,7 @@ export function Badge({ label, variant = 'primary' }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: {
     paddingHorizontal: Spacing[2],
     paddingVertical: 3,

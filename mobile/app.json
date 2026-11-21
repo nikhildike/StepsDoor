@@ -31,10 +31,11 @@
           "imageWidth": 76
         }
       ],
-      "expo-status-bar",
       "expo-font",
       "expo-web-browser",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-image",
+      "expo-status-bar"
     ]
   }
 }

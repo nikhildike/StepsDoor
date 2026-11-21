@@ -26,6 +26,14 @@ export const govtJobService = {
    */
   get: (id: number) => api.get(`/govtjobs/${id}/`),
   /**
+   * Lists the distinct states with at least one active govt job, each with
+   * a count (curated against a known portal->state map so scraped junk
+   * doesn't pollute the list).
+   * @returns Axios response with `[{ state, count }]` (no pagination wrapper).
+   * @remarks Used to populate the Govt Jobs segment's "All States" filter picker.
+   */
+  states: () => api.get('/govtjobs/states/'),
+  /**
    * List the signed-in job seeker's saved govt-job alert subscriptions.
    * @returns Axios response with the user's GovtJobAlert records.
    * @remarks Used by the seeker's Alerts screen.

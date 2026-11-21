@@ -12,7 +12,7 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { TendersScreen } from '@/screens/tenders/TendersScreen';
 import { TenderDetailScreen } from '@/screens/tenders/TenderDetailScreen';
-import { Colors } from '@/theme/colors';
+import { useThemeColors } from '@/theme/colors';
 
 const Stack = createNativeStackNavigator();
 
@@ -25,6 +25,7 @@ const Stack = createNativeStackNavigator();
  * `AppNavigator`.
  */
 export function TendersStackNavigator() {
+  const Colors = useThemeColors();
   return (
     <Stack.Navigator
       screenOptions={{

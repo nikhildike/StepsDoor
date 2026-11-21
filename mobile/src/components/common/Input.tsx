@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { TextInput, View, Text, StyleSheet, TextInputProps } from 'react-native';
-import { Colors } from '@/theme/colors';
+import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 
@@ -37,6 +37,8 @@ interface Props extends TextInputProps {
  * Props: see `Props` interface above.
  */
 export function Input({ label, error, style, ...props }: Props) {
+  const Colors = useThemeColors();
+  const styles = makeStyles(Colors);
   return (
     <View>
       {/* Label is optional — only rendered when provided. */}
@@ -54,7 +56,7 @@ export function Input({ label, error, style, ...props }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   label: { fontSize: FontSize.sm, fontWeight: '500', color: Colors.text, marginBottom: 6 },
   input: {
     height: 48,

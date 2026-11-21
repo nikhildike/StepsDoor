@@ -6,7 +6,7 @@
  */
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Colors } from '@/theme/colors';
+import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { Spacing } from '@/theme/spacing';
 
@@ -34,6 +34,8 @@ interface Props {
  * Props: see `Props` interface above.
  */
 export function EmptyState({ title, description, action }: Props) {
+  const Colors = useThemeColors();
+  const styles = makeStyles(Colors);
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
@@ -45,7 +47,7 @@ export function EmptyState({ title, description, action }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing[8] },
   title: { fontSize: FontSize.lg, fontWeight: FontWeight.semibold, color: Colors.text, textAlign: 'center' },
   description: { fontSize: FontSize.base, color: Colors.textSecondary, textAlign: 'center', marginTop: Spacing[2] },

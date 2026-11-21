@@ -2,9 +2,10 @@
  * AlertsScreen.tsx
  *
  * Shows the job seeker's saved Tender and Govt Job alerts in one merged
- * list. Lives in the "Alerts" bottom tab (account-related content, alongside
- * SavedJobs and Profile). Note: this app has no "Job" alerts — job alert
- * matching only applies to tenders/govt jobs per the alerts backend app.
+ * list. Reached via `BurgerMenu`'s "Alerts" item (registered as a
+ * root-stack screen — see `navigation/index.tsx` — rather than a bottom
+ * tab). Note: this app has no "Job" alerts — job alert matching only
+ * applies to tenders/govt jobs per the alerts backend app.
  */
 import React, { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
@@ -14,7 +15,7 @@ import { Spinner } from '@/components/common/Spinner';
 import { EmptyState } from '@/components/common/EmptyState';
 import { ScreenWrapper } from '@/components/common/ScreenWrapper';
 import { Badge } from '@/components/common/Badge';
-import { Colors } from '@/theme/colors';
+import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
 
@@ -30,12 +31,14 @@ interface Alert {
  * Renders a combined, read-only list of the user's Tender alerts and Govt
  * Job alerts (keyword/category/state subscriptions). Reads no route params.
  * Use case: lets a job seeker review what alerts they've configured (alerts
- * are created from `TendersScreen`/`GovtJobsScreen`, not from this screen).
+ * are created from `TendersScreen`/`HomeScreen`'s Govt Jobs segment, not from this screen).
  */
 export function AlertsScreen() {
   const [tenderAlerts, setTenderAlerts] = useState<any[]>([]);
   const [govtJobAlerts, setGovtJobAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const Colors = useThemeColors();
+  const styles = makeStyles(Colors);
 
   // Fetches both alert lists in parallel on mount: GET /tenders/alerts/ and
   // GET /govtjobs/alerts/. Each is caught independently so one failing
@@ -98,7 +101,7 @@ export function AlertsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   list: { padding: Spacing[4] },
   card: {
     backgroundColor: Colors.surface,

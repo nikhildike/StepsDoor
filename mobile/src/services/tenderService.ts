@@ -26,6 +26,14 @@ export const tenderService = {
    */
   get: (id: number) => api.get(`/tenders/${id}/`),
   /**
+   * Lists the distinct states with at least one active tender, each with a
+   * count (curated against a known portal->state map so scraped junk
+   * doesn't pollute the list).
+   * @returns Axios response with `[{ state, count }]` (no pagination wrapper).
+   * @remarks Used to populate the Tenders list screen's "All States" filter picker.
+   */
+  states: () => api.get('/tenders/states/'),
+  /**
    * List the signed-in job seeker's saved tender alert subscriptions.
    * @returns Axios response with the user's TenderAlert records.
    * @remarks Used by the seeker's Alerts screen.

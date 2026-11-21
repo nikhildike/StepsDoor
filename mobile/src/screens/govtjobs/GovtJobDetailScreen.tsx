@@ -1,9 +1,9 @@
 /**
  * GovtJobDetailScreen.tsx
  *
- * Full-detail view for a single government job listing. Belongs to the
- * Govt Jobs tab's stack navigator (list → detail), pushed from
- * `GovtJobsScreen` when a card is tapped.
+ * Full-detail view for a single government job listing. Belongs to
+ * `JobsStackNavigator`, pushed from `HomeScreen`'s Govt Jobs segment when
+ * a card is tapped.
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Linking } from 'react-native';
@@ -12,7 +12,7 @@ import { Button } from '@/components/common/Button';
 import { Spinner } from '@/components/common/Spinner';
 import { Badge } from '@/components/common/Badge';
 import { ScreenWrapper } from '@/components/common/ScreenWrapper';
-import { Colors } from '@/theme/colors';
+import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { Spacing } from '@/theme/spacing';
 
@@ -21,12 +21,15 @@ import { Spacing } from '@/theme/spacing';
  * category, vacancies, application deadline, qualification, description, and
  * an "Apply Now" action. Reads `route.params.jobId` (the govt job's numeric
  * id) to fetch the record. Use case: destination screen when a job seeker
- * taps a listing in `GovtJobsScreen` to read more and apply externally.
+ * taps a listing in `HomeScreen`'s Govt Jobs segment to read more and
+ * apply externally.
  */
 export function GovtJobDetailScreen({ route }: { route: any }) {
   const { jobId } = route.params;
   const [job, setJob] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const Colors = useThemeColors();
+  const styles = makeStyles(Colors);
 
   // Fetches the full govt job record from GET /govtjobs/{jobId}/ whenever
   // jobId changes, and clears the loading state once the request settles.
@@ -93,7 +96,7 @@ export function GovtJobDetailScreen({ route }: { route: any }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   container: { padding: Spacing[5] },
   title: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.text },
   org: { fontSize: FontSize.base, color: Colors.textSecondary, marginTop: Spacing[1] },

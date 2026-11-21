@@ -26,6 +26,7 @@ interface User {
   username: string;
   is_company: boolean;
   is_job_seeker: boolean;
+  is_contractor: boolean;  // True for contractor accounts; post-login these land on Tenders, not Jobs
 }
 
 interface AuthState {
@@ -66,8 +67,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   // Action: signs the user out. Removes both persisted tokens from
-  // AsyncStorage and clears in-memory state, causing RootNavigator to
-  // switch back to AuthNavigator.
+  // AsyncStorage and clears in-memory state; the user stays on whichever
+  // App tab they were viewing (browsing needs no auth), now reflected as
+  // logged-out (e.g. ProfileScreen's guest prompt).
   logout: async () => {
     await AsyncStorage.multiRemove(['access_token', 'refresh_token']);
     set({ user: null, token: null, refreshToken: null });
