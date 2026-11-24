@@ -28,3 +28,14 @@ export function useListingPrefix() {
   const { pathname } = useLocation()
   return pathname.startsWith('/seeker') ? '/seeker' : ''
 }
+
+/**
+ * Base path of the private-job list for the current layout: '/seeker/browse-jobs'
+ * inside the job seeker dashboard (so browsing and opening jobs keeps the sidebar),
+ * '/jobs' on the public site. Job pages: `${base}` (list), `${base}/<id>` (detail).
+ * ('/seeker/jobs' is taken by the contractor's My Jobs page, hence "browse-jobs".)
+ */
+export function useJobsBase() {
+  const { pathname } = useLocation()
+  return pathname.startsWith('/seeker') ? '/seeker/browse-jobs' : '/jobs'
+}

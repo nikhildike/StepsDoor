@@ -242,7 +242,7 @@ function SeekerDashboard({ name, savedJobs, alerts, recentJobs, govtJobs }) {
       <div className="bg-white rounded-xl border border-border">
         <div className="p-5 border-b flex items-center justify-between">
           <h2 className="font-semibold">Latest Job Openings</h2>
-          <Link to="/jobs" className="text-sm text-primary hover:underline">Browse all</Link>
+          <Link to="/seeker/browse-jobs" className="text-sm text-primary hover:underline">Browse all</Link>
         </div>
         {recentJobs.length === 0 ? (
           // Empty state: no job listings returned by the API.
@@ -258,7 +258,7 @@ function SeekerDashboard({ name, savedJobs, alerts, recentJobs, govtJobs }) {
                     {job.company_name} · {job.city} · {JOB_TYPE_LABELS[job.job_type] || job.job_type}
                   </p>
                 </div>
-                <Link to={`/jobs/${job.id}`} className="text-xs text-primary hover:underline shrink-0 ml-4">
+                <Link to={`/seeker/browse-jobs/${job.id}`} className="text-xs text-primary hover:underline shrink-0 ml-4">
                   View →
                 </Link>
               </div>

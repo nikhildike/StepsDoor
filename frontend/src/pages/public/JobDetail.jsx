@@ -9,7 +9,7 @@
  */
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { MapPin, Clock, IndianRupee, ExternalLink, Bookmark, Building2 } from 'lucide-react'
+import { MapPin, Clock, IndianRupee, ExternalLink, Bookmark, Building2, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
@@ -19,6 +19,7 @@ import { useAuthStore } from '@/store/authStore'
 import { formatSalaryRange } from '@/utils/formatCurrency'
 import { formatDate } from '@/utils/formatDate'
 import { JOB_TYPES } from '@/utils/constants'
+import { useJobsBase } from '@/hooks/useDashboardBase'
 
 /**
  * Renders the full detail view for one job: title/company header, meta
@@ -26,7 +27,9 @@ import { JOB_TYPES } from '@/utils/constants'
  * open positions, Apply/Save actions, and the full job description.
  */
 export default function JobDetail() {
-  const { id } = useParams() // job id from the /jobs/:id route
+  const { id } = useParams() // job id from /jobs/:id or /seeker/browse-jobs/:id
+  // Job list this page belongs to: /jobs publicly, /seeker/browse-jobs in the student dashboard.
+  const jobsBase = useJobsBase()
   const navigate = useNavigate()
   const { token } = useAuthStore() // used to gate the Save action behind login
   // Shared saved-jobs hook: tracks which jobs are saved, exposes a toggle,
@@ -77,6 +80,9 @@ export default function JobDetail() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <Link to={jobsBase} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6">
+        <ArrowLeft className="h-4 w-4" /> Back to jobs
+      </Link>
       <div className="bg-white border border-border rounded-xl p-8 space-y-6">
 
         {/* Header */}

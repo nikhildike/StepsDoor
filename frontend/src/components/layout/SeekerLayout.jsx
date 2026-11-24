@@ -5,7 +5,7 @@
  * seekers and contractors; the sidebar nav items and role label adapt to the
  * signed-in user's role:
  *
- *   Job seeker:  Dashboard · Govt Jobs · Saved Jobs · Alerts · My Profile
+ *   Job seeker:  Dashboard · Jobs · Govt Jobs · Saved Jobs · Alerts · My Profile
  *   Contractor:  Dashboard · Tenders · Tender Alerts · Post a Job · My Jobs · My Profile
  *   (plus Shopping / Retail Stores / Services for both)
  *
@@ -31,6 +31,7 @@ const BROWSE_NAV = [
 // Nav items shown to job seekers.
 const SEEKER_NAV = [
   { to: '/seeker',         label: 'Dashboard',     icon: LayoutDashboard, end: true },
+  { to: '/seeker/browse-jobs', label: 'Jobs',      icon: Briefcase },
   { to: '/seeker/govt-jobs', label: 'Govt Jobs',   icon: Landmark },
   { to: '/seeker/saved',   label: 'Saved Jobs',    icon: Bookmark },
   { to: '/seeker/alerts',  label: 'Alerts',        icon: Bell }, // job + government job alerts

@@ -74,7 +74,8 @@ export default function SavedJobs() {
           <Bookmark className="h-10 w-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No saved jobs yet</p>
           <p className="text-sm mt-1">Browse jobs and bookmark the ones you like.</p>
-          <Link to="/jobs" className="text-primary text-sm hover:underline mt-3 inline-block">Browse Jobs →</Link>
+          {/* Stays inside the dashboard (the public /jobs page has no sidebar). */}
+          <Link to="/seeker/browse-jobs" className="text-primary text-sm hover:underline mt-3 inline-block">Browse Jobs →</Link>
         </div>
       ) : (
         <div className="space-y-3">

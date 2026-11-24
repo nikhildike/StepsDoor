@@ -204,6 +204,10 @@ export default function App() {
         <Route path="tenders" element={<Tenders />} />
         {/* Govt jobs (latest openings + portal directory) inside the job seeker dashboard. */}
         <Route path="govt-jobs" element={<GovtJobs />} />
+        {/* Private job listings inside the student dashboard ("Jobs" in its sidebar). Not
+            /seeker/jobs — that's the contractor's My Jobs (ManageJobs) page. */}
+        <Route path="browse-jobs" element={<Jobs />} />
+        <Route path="browse-jobs/:id" element={<JobDetail />} />
         {/* Listing detail pages opened from the dashboard lists stay in the dashboard. */}
         <Route path="tenders/:id" element={<TenderDetail />} />
         <Route path="govt-jobs/:id" element={<GovtJobDetail />} />

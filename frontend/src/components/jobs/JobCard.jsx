@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/Badge'
 import { formatSalaryRange } from '@/utils/formatCurrency'
 import { timeAgo } from '@/utils/formatDate'
 import { JOB_TYPES } from '@/utils/constants'
+import { useJobsBase } from '@/hooks/useDashboardBase'
 
 /**
  * JobCard
@@ -34,6 +35,8 @@ import { JOB_TYPES } from '@/utils/constants'
  * results, etc.) wherever a grid/list of job cards is rendered.
  */
 export function JobCard({ job, isSaved = false, onToggleSave, isPending = false }) {
+  // /jobs/:id on the public site, /seeker/browse-jobs/:id inside the student dashboard.
+  const jobsBase = useJobsBase()
   // Resolve the human-readable label for the job's type code (e.g. 'full_time' -> 'Full-time'),
   // falling back to the raw value if it isn't found in the JOB_TYPES lookup.
   const typeLabel = JOB_TYPES.find(t => t.value === job.job_type)?.label ?? job.job_type
@@ -48,7 +51,7 @@ export function JobCard({ job, isSaved = false, onToggleSave, isPending = false 
   }
 
   return (
-    <Link to={`/jobs/${job.id}`} className="block bg-white border border-border rounded-xl p-5 hover:shadow-md transition-shadow">
+    <Link to={`${jobsBase}/${job.id}`} className="block bg-white border border-border rounded-xl p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-foreground truncate">{job.title}</h3>
