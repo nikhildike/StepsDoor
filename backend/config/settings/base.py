@@ -73,6 +73,7 @@ THIRD_PARTY_APPS = [
     'django_celery_beat',
     'drf_spectacular',
     'import_export',
+    'anymail',  # django-anymail: SendGrid email backend (see EMAIL section below)
 ]
 
 # StepsDoor's own apps — see CLAUDE.md's app table for what each one owns.
@@ -378,10 +379,20 @@ RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
 # SENDGRID
 # ===========================================================================
 
-# Used via django-anymail for transactional email (alerts, notifications)
-# in production. In development, EMAIL_BACKEND is swapped to the console
-# backend (see development.py) so this key isn't required locally.
+# Used via django-anymail for transactional email (scraper failure alerts now; job/tender
+# alert notifications later). production.py sets EMAIL_BACKEND to anymail's SendGrid
+# backend; development.py prints email to the console unless EMAIL_BACKEND is set in .env.
+# An empty or wrong key isn't caught before sending: SendGrid answers 401 and anymail
+# raises AnymailAPIError — so it shows up as a failed task in the worker log, not
+# silently dropped mail. Check the key once after deploying (see CLAUDE.md, Email).
 SENDGRID_API_KEY = config('SENDGRID_API_KEY', default='')
+ANYMAIL = {
+    'SENDGRID_API_KEY': SENDGRID_API_KEY,
+}
+# Sender for all outgoing mail. SendGrid rejects senders that aren't verified in the
+# SendGrid account (Single Sender Verification or an authenticated stepsdoor.in domain).
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='StepsDoor <noreply@stepsdoor.in>')
+SERVER_EMAIL = DEFAULT_FROM_EMAIL  # sender for Django's own error mail to ADMINS
 
 
 # ===========================================================================

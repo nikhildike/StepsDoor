@@ -436,3 +436,51 @@ class FailingScraperAlertTests(TestCase):
         self.runs(self.broken, ScraperLog.Status.FAILED, ScraperLog.Status.SUCCESS)
         self.assertEqual(alert_failing_scrapers(), 0)
         self.assertEqual(mail.outbox, [])
+
+
+@override_settings(
+    EMAIL_BACKEND='anymail.backends.sendgrid.EmailBackend',
+    ANYMAIL={'SENDGRID_API_KEY': 'SG.test-key'},
+    DEFAULT_FROM_EMAIL='StepsDoor <noreply@stepsdoor.in>',
+    SCRAPER_ALERT_EMAILS=['ops@example.com'],
+    SCRAPER_ALERT_AFTER_FAILURES=1,
+)
+class SendGridEmailTests(TestCase):
+    """
+    The production email path: mail is posted to SendGrid's v3 API.
+
+    Every test patches requests.Session.request — anymail sends even with an empty key,
+    so an unpatched test would make a real call to api.sendgrid.com.
+    """
+
+    @staticmethod
+    def sendgrid_response(status):
+        """A fake requests.Response from SendGrid with the given status code."""
+        body = '' if status == 202 else '{"errors": [{"message": "Permission denied, wrong credentials"}]}'
+        return mock.Mock(status_code=status, text=body, content=body.encode(), headers={}, reason='')
+
+    def test_alert_is_sent_through_sendgrid(self):
+        """alert_failing_scrapers → anymail → POST https://api.sendgrid.com/v3/mail/send with our key and sender."""
+        import json
+        from apps.tenders.tasks import alert_failing_scrapers
+        source = ScraperSource.objects.create(url='https://broken.example.gov.in')
+        ScraperLog.objects.create(portal=source.source_portal, status=ScraperLog.Status.FAILED, error_message='no rows')
+
+        with mock.patch('requests.Session.request', return_value=self.sendgrid_response(202)) as request,                 self.assertLogs('apps.tenders.tasks', level='ERROR'):
+            self.assertEqual(alert_failing_scrapers(), 1)
+
+        call = request.call_args.kwargs
+        self.assertEqual((call['method'].upper(), call['url']), ('POST', 'https://api.sendgrid.com/v3/mail/send'))
+        self.assertEqual(call['headers']['Authorization'], 'Bearer SG.test-key')
+        payload = json.loads(call['data'])
+        self.assertEqual(payload['from'], {'email': 'noreply@stepsdoor.in', 'name': 'StepsDoor'})
+        self.assertEqual(payload['personalizations'][0]['to'], [{'email': 'ops@example.com'}])
+        self.assertIn('broken.example.gov.in', payload['content'][0]['value'])
+
+    def test_rejected_key_raises(self):
+        """A wrong/empty key isn't silently ignored: SendGrid's 401 becomes an AnymailAPIError."""
+        from anymail.exceptions import AnymailAPIError
+        from django.core.mail import send_mail
+        with mock.patch('requests.Session.request', return_value=self.sendgrid_response(401)):
+            with self.assertRaises(AnymailAPIError):
+                send_mail('s', 'b', None, ['ops@example.com'])

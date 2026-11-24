@@ -12,6 +12,7 @@ django-celery-beat>=2.6
 drf-spectacular>=0.27
 razorpay>=1.4
 psycopg2-binary>=2.9
+django-anymail[sendgrid]>=13.0  # transactional email via SendGrid (production EMAIL_BACKEND)
 dj-database-url>=2.1
 django-storages>=1.14
 django-import-export>=4.0

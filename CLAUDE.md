@@ -301,3 +301,7 @@ When making future changes to this repo — new files, new functions, edits to e
 | Email | SendGrid (django-anymail) |
 | PDF Invoices | WeasyPrint |
 | App Build | EAS Build (cloud) |
+
+### Email
+
+Sent with Django's `send_mail` through django-anymail's SendGrid backend in production (`production.py`); development prints mail to the console unless `.env` sets `EMAIL_BACKEND=anymail.backends.sendgrid.EmailBackend`. Production needs `SENDGRID_API_KEY` and a SendGrid-verified sender in `DEFAULT_FROM_EMAIL` (default `StepsDoor <noreply@stepsdoor.in>` — verify that address or authenticate the stepsdoor.in domain in SendGrid, or SendGrid rejects the mail). An empty or wrong key isn't caught up front: SendGrid answers 401 and the task fails with `AnymailAPIError` in the worker log. Tests that touch the SendGrid backend must patch `requests.Session.request` — anymail will make a real HTTP call even with an empty key. `anymail.W003` is silenced in production; see the comment there.

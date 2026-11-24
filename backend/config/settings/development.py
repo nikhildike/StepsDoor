@@ -27,5 +27,6 @@ CORS_ALLOW_ALL_ORIGINS = True
 # Print emails to the terminal instead of sending them
 # (avoids needing real SendGrid credentials just to run locally; lets you
 # read alert/notification emails straight from the runserver console).
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = 'noreply@stepsdoor.in'
+# Print email to the console by default; set EMAIL_BACKEND=anymail.backends.sendgrid.EmailBackend
+# (plus SENDGRID_API_KEY) in .env to send real mail through SendGrid while testing.
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
