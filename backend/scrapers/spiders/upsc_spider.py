@@ -33,6 +33,7 @@ def _clean(text):
 class UpscSpider(scrapy.Spider):
     """Crawls UPSC's active examinations and recruitment advertisements (two requests per run)."""
     name = 'upsc'
+    empty_ok = True  # every exam window can be closed at once; missing tables are logged as errors instead
 
     custom_settings = {
         'DOWNLOAD_DELAY': 2,

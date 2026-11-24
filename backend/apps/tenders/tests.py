@@ -24,7 +24,7 @@ from apps.govtjobs.models import GovtJob
 from apps.tenders.models import ScraperLog, ScraperSource, Tender
 from apps.tenders.scraping import run_source
 from apps.tenders.tasks import expire_stale_listings
-from scrapers.pipelines import ScraperLogPipeline, _is_open, _parse_dt
+from scrapers.pipelines import ScraperLogPipeline, _is_open, _parse_deadline, _parse_dt
 from scrapers.spiders.generic_tender_spider import GenericTenderSpider
 
 # Real pages saved from etenders.hry.nic.in (24 Nov 2026): the NIC home page,
@@ -93,6 +93,20 @@ class ParseDateTests(TestCase):
         parsed = _parse_dt('05/12/2026 17:00')
         self.assertEqual(parsed, datetime(2026, 12, 5, 11, 30, tzinfo=dt_timezone.utc))
 
+    def test_iso_dates_keep_month_and_day(self):
+        """ISO strings from APIs aren't day-first: 2026-12-08 is 8 December, not 12 August."""
+        self.assertEqual(
+            _parse_dt('2026-12-08T17:30:00.000Z'),
+            datetime(2026, 12, 8, 17, 30, tzinfo=dt_timezone.utc),
+        )
+        self.assertEqual(_parse_dt('2026-11-07').date().isoformat(), '2026-11-07')
+
+    def test_date_only_deadline_means_end_of_day(self):
+        """'10-Dec-2026' stays open all of 10 Dec IST; an explicit time is kept as-is."""
+        self.assertEqual(_parse_deadline('10-Dec-2026'), datetime(2026, 12, 10, 18, 29, 59, tzinfo=dt_timezone.utc))
+        self.assertEqual(_parse_deadline('01-Dec-2026 05:00 PM'), datetime(2026, 12, 1, 11, 30, tzinfo=dt_timezone.utc))
+        self.assertIsNone(_parse_deadline(''))
+
     def test_unparseable_or_empty_returns_none(self):
         """Junk cells fall back to None so the pipeline's defaults apply."""
         self.assertIsNone(_parse_dt(''))
@@ -143,6 +157,12 @@ class ScraperLogPipelineTests(TestCase):
         self.assertEqual(self.close(found=3, errors=2).status, ScraperLog.Status.PARTIAL)
         self.assertEqual(self.close(found=3, reason='closespider_timeout').status, ScraperLog.Status.PARTIAL)
         self.assertIsNotNone(self.source.last_scraped_at)
+
+    def test_empty_ok_spider_with_nothing_open_is_success(self):
+        """A spider that opts in with empty_ok may legitimately find nothing; errors still fail it."""
+        self.spider.empty_ok = True
+        self.assertEqual(self.close(found=0).status, ScraperLog.Status.SUCCESS)
+        self.assertEqual(self.close(found=0, errors=1).status, ScraperLog.Status.FAILED)
 
     def test_abnormal_finish_is_failed(self):
         """Shutdown/cancel reasons fail the run even if some items were saved."""

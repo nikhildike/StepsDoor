@@ -20,6 +20,7 @@ bare `scrapy crawl <spider_name>`.
 """
 import logging
 import threading
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from dateutil import parser as dateutil_parser
@@ -63,13 +64,34 @@ def _parse_dt(value):
     """
     if not value:
         return None
+    text = str(value).strip()
     try:
-        parsed = dateutil_parser.parse(str(value), dayfirst=True)
-    except (ValueError, TypeError, OverflowError):
-        return None
+        # ISO strings from JSON APIs (SSC: "2026-12-08T17:30:00.000Z") must not go
+        # through dayfirst parsing, which swaps month and day ("2026-12-08" → 12 Aug).
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        try:
+            parsed = dateutil_parser.parse(text, dayfirst=True)
+        except (ValueError, TypeError, OverflowError):
+            return None
     if timezone.is_naive(parsed):
         parsed = parsed.replace(tzinfo=PORTAL_TIMEZONE)
     return parsed
+
+
+def _parse_deadline(value):
+    """
+    Parse a closing date; a date with no time of day means the END of that day (IST).
+
+    "10-Dec-2026" on a portal means applications are accepted all of 10 December,
+    but _parse_dt reads it as 00:00 — which would hide the listing on the morning
+    of its last day. Used for Tender.submission_deadline and
+    GovtJob.application_deadline (the fields is_active/expiry depend on).
+    """
+    parsed = _parse_dt(value)
+    if parsed is None or ':' in str(value):
+        return parsed  # has an explicit time ("05:00 PM", ISO "T17:30")
+    return parsed.astimezone(PORTAL_TIMEZONE).replace(hour=23, minute=59, second=59)
 
 
 def _is_open(deadline):
@@ -112,7 +134,7 @@ class TenderPipeline:
         """
         from apps.tenders.models import Tender
 
-        submission_deadline = _parse_dt(item.get('submission_deadline'))
+        submission_deadline = _parse_deadline(item.get('submission_deadline'))
         defaults = {
             'title':               item.get('title', '').strip(),
             'description':         item.get('description', '').strip(),
@@ -167,7 +189,7 @@ class GovtJobPipeline:
         """
         from apps.govtjobs.models import GovtJob
 
-        application_deadline = _parse_dt(item.get('application_deadline'))
+        application_deadline = _parse_deadline(item.get('application_deadline'))
         defaults = {
             'title':                item.get('title', '').strip(),
             'organisation':         item.get('organisation', '').strip(),
@@ -272,7 +294,11 @@ class ScraperLogPipeline:
                    means the selectors no longer match the page)
         - PARTIAL: items were saved, but errors were logged or the crawl was
                    cut off by CLOSESPIDER_TIMEOUT
-        - SUCCESS: finished normally with items and no errors
+        - SUCCESS: finished normally with items and no errors — or with zero
+                   items and no errors on a spider that sets `empty_ok = True`
+                   (recruiters such as SSC can genuinely have nothing open;
+                   those spiders log an ERROR when the page structure they
+                   rely on is missing, so a broken page still ends FAILED)
         """
         from apps.tenders.models import ScraperLog, ScraperSource
         if self.log is None:
@@ -281,8 +307,12 @@ class ScraperLogPipeline:
         Status = ScraperLog.Status
         if reason not in ('finished', 'closespider_timeout'):
             status, message = Status.FAILED, f"Crawl ended early: {reason}"
-        elif self.items_found == 0:
+        elif self.items_found == 0 and error_count:
+            status, message = Status.FAILED, f"No items saved; {error_count} error(s) logged (see the crawl log)."
+        elif self.items_found == 0 and not getattr(spider, 'empty_ok', False):
             status, message = Status.FAILED, "Crawl finished but no items were saved — the page layout may have changed."
+        elif self.items_found == 0:
+            status, message = Status.SUCCESS, 'Nothing open right now (the page was read correctly).'
         elif reason == 'closespider_timeout':
             status, message = Status.PARTIAL, "Stopped at the time limit before the crawl finished."
         elif error_count:

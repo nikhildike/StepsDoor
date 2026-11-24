@@ -206,7 +206,15 @@ Celery Beat (daily)
 
 **Tenders — `generic_tender_spider.py` handles NIC eProcurement portals only** (~27 state/central/PSU portals: `<domain>/nicgep/app`, or `/eprocure/app` on eprocure.gov.in). Without login NIC exposes just the 10-row "Latest Tenders" box (`table#activeTenders`); the full list is behind a captcha. Each row's detail page has the real data (`td.td_caption`/`td.td_field` pairs) but only within the same server session, so this spider turns cookies ON (the project default is off). Tenders are keyed by NIC Tender ID (`2026_HRY_562238_1`); `source_url` is the portal home because detail URLs expire with the session. Non-NIC sites log "No NIC 'Latest Tenders' table" and save nothing (FAILED) — there is no generic table fallback, by design (it produced only junk). Parsing tests use real saved pages in `apps/tenders/test_fixtures/`.
 
-**Govt jobs — `generic_govtjob_spider.py` is not used**: on real sites it mostly saved results, admit cards and menu links. Each recruiter gets a dedicated spider instead; generic govt-job sources stay switched off.
+**Govt jobs — `generic_govtjob_spider.py` is not used**: on real sites it mostly saved results, admit cards and menu links. Each recruiter gets a dedicated spider instead; generic govt-job sources stay switched off. Current spiders (`scrapers/spiders/`):
+- `upsc` — HTML tables: /active-examinations/ (rows with a last date only) and /advertisements/ (PDF URL matched by file name).
+- `ssc` — ssc.gov.in is a JS SPA; reads its public JSON API `/api/admin/5.1/liveExams`. Skips Limited Departmental (LDCE) exams.
+- `ibps` — /recruitment/ list (exams IBPS runs for SBI, BPCL, banks…) plus "Notification for Common Recruitment Process" entries from /crp-updates/ younger than 30 days.
+- `rrb` — rrbapply.gov.in is an Angular app; the open-CEN ticker (`initializeNotices`) is a literal in a JS chunk whose name changes per deploy, so the spider walks portal page → `main-*.js` → chunks. Only public static files are fetched, never the application API.
+
+Spiders for recruiters that can legitimately have nothing open set `empty_ok = True` (zero items + no errors = SUCCESS) and must `logger.error()` when the structure they parse is missing, so a redesign still ends FAILED. Parsing tests use saved pages in `apps/govtjobs/test_fixtures/`.
+
+Deadlines go through `_parse_deadline`: a date without a time means 23:59:59 IST that day. ISO strings are parsed strictly first (dateutil's `dayfirst=True` would turn `2026-12-08` into 12 Aug).
 
 `python manage.py clean_scraper_sources [--dry-run] [--no-probe]` tidies the registry: moves notes typed after URLs in spreadsheet imports into `notes`, probes tender sources for NIC and switches off non-NIC ones, and flags generic govt-job sources. It never deletes rows or switches anything on.
 
