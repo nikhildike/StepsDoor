@@ -1,16 +1,21 @@
 /**
  * Tenders.jsx
  *
- * Public directory page mounted at `/tenders` (see App.jsx). NOTE: distinct
- * from the scraped Tender listings shown via TenderDetail.jsx — this page
- * is a static, curated directory of official government e-procurement
- * portal links, split into Central & PSU portals (CENTRAL_PORTALS,
+ * Tenders page mounted at `/tenders` and, in the contractor sidebar,
+ * `/seeker/tenders` (see App.jsx). Two views, switched by tabs:
+ *   - "Latest tenders" — the scraped tenders list (components/tenders/
+ *     LatestTenders.jsx); members only, guests see a sign-in prompt. The
+ *     default for signed-in users, so contractors land on it after login.
+ *   - "Official portals" — the static, public, curated directory of official
+ *     government e-procurement portal links, split into Central & PSU portals (CENTRAL_PORTALS,
  * sub-categorised) and State tender portals (STATE_TENDERS), each card
  * linking straight to the official portal. Supports central-category
  * filtering and a search that spans both sections regardless of the
  * current sidebar selection.
  */
 import { useState } from 'react'
+import { LatestTenders } from '@/components/tenders/LatestTenders'
+import { useAuthStore } from '@/store/authStore'
 import { ExternalLink, Building2, MapPin, ChevronRight, Search } from 'lucide-react'
 
 // Central Government & PSU e-procurement portals (eProcure, GEM, CPPP,
@@ -112,6 +117,10 @@ function LinkCard({ name, url, desc, badge, badgeClass }) {
  * cards.
  */
 export default function Tenders() {
+  const { token } = useAuthStore()
+  // Which view is shown: 'latest' (scraped tenders, members) or 'portals' (static directory).
+  // Members start on the scraped list; guests on the public directory.
+  const [view, setView] = useState(token ? 'latest' : 'portals')
   const [section, setSection] = useState('all') // which top-level section is shown: 'all' | 'central' | 'state'
   const [filter, setFilter]   = useState('all') // active Central & PSU category filter
   const [search, setSearch]   = useState('')    // search box value — spans every section, ignoring section/filter selection
@@ -178,10 +187,34 @@ export default function Tenders() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground mb-1">Government Tenders</h1>
         <p className="text-muted-foreground text-sm">
-          Official procurement portals for central government bodies and all state tender systems.
-          Click any card to go directly to the official portal and submit your bid.
+          {view === 'latest'
+            ? 'Open tenders collected every hour from official government eProcurement portals.'
+            : 'Official procurement portals for central government bodies and all state tender systems. Click any card to go directly to the official portal and submit your bid.'}
         </p>
       </div>
+
+      {/* View tabs: scraped tender list vs. the static portal directory */}
+      <div className="mb-6 inline-flex rounded-lg border border-border bg-muted/40 p-1 text-sm" role="tablist">
+        {[
+          { key: 'latest', label: 'Latest tenders' },
+          { key: 'portals', label: 'Official portals' },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={view === tab.key}
+            onClick={() => setView(tab.key)}
+            className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+              view === tab.key ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'latest' ? <LatestTenders /> : (<>
 
       {/* Search — spans every section, ignoring the current sidebar selection */}
       <div className="mb-6 relative max-w-sm">
@@ -394,6 +427,8 @@ export default function Tenders() {
       </div>
       </>
       )}
+
+      </>)}
 
       <p className="mt-10 text-xs text-muted-foreground text-center border-t pt-6">
         StepsDoor links directly to official government procurement portals. We are not affiliated with any government body.
