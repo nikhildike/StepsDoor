@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Briefcase, Building2, ExternalLink, Search } from 'lucide-react'
 import { companyService } from '@/services/companyService'
+import { useListingPrefix } from '@/hooks/useDashboardBase'
 import { Spinner } from '@/components/ui/Spinner'
 import { Input } from '@/components/ui/Input'
 
@@ -640,6 +641,8 @@ function CareerLinkCard({ name, url, desc, sector }) {
  */
 export default function Companies() {
   const navigate = useNavigate()
+  // '/seeker' inside the dashboard, so a company's careers page opens there too.
+  const prefix = useListingPrefix()
   const [companies, setCompanies] = useState([]) // StepsDoor subscriber companies fetched from the API
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')       // top-section search (subscriber companies + directory fallback)
@@ -730,7 +733,7 @@ export default function Companies() {
               <CompanyCard
                 key={company.id}
                 company={company}
-                onClick={() => navigate(`/careers/${company.slug}`)}
+                onClick={() => navigate(`${prefix}/careers/${company.slug}`)}
               />
             ))}
           </div>

@@ -8,40 +8,45 @@
  * navbar's height). Used as the layout route element for /jobs, /companies,
  * /govt-jobs, and /freelancers.
  */
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
-// Tab bar entries: each maps to one of the top-level job-related public routes
+// Tabs of the Jobs hub. Public site: /jobs, /companies, /govt-jobs, /freelancers.
+// Inside the job seeker dashboard the same pages are mounted under /seeker (private
+// jobs at /seeker/browse-jobs, since /seeker/jobs is the contractor's My Jobs), so the
+// hub keeps the dashboard sidebar.
 const JOB_TABS = [
-  { to: '/jobs',        label: 'Jobs'         },
-  { to: '/companies',   label: 'Companies'    },
-  { to: '/govt-jobs',   label: 'Govt Jobs'    },
-  { to: '/freelancers', label: 'Freelancing'  },
+  { label: 'Jobs',        publicTo: '/jobs',        dashboardTo: '/seeker/browse-jobs' },
+  { label: 'Companies',   publicTo: '/companies',   dashboardTo: '/seeker/companies' },
+  { label: 'Govt Jobs',   publicTo: '/govt-jobs',   dashboardTo: '/seeker/govt-jobs' },
+  { label: 'Freelancing', publicTo: '/freelancers', dashboardTo: '/seeker/freelancers' },
 ]
+
+/** Paths of the hub's tab pages inside the dashboard — SeekerLayout highlights "Jobs" on all of them. */
+export const DASHBOARD_JOB_HUB_PATHS = JOB_TABS.map(t => t.dashboardTo)
 
 /**
  * JobsLayout
  *
- * Sticky tab navigation shell for job-related public routes, with the active
- * child page rendered underneath via <Outlet />.
- *
- * Props: none.
- *
- * Used as the parent layout route for /jobs, /companies, /govt-jobs, and
- * /freelancers so those pages share a consistent section-switcher tab bar.
+ * Tab strip (Jobs / Companies / Govt Jobs / Freelancing) above the matched child
+ * page. Used twice in App.jsx: inside PublicLayout (sticky under the 64px navbar)
+ * and inside SeekerLayout as the dashboard's "Jobs" section (not sticky — the
+ * dashboard scrolls its own content area).
  */
 export default function JobsLayout() {
+  const { pathname } = useLocation()
+  const inDashboard = pathname.startsWith('/seeker')
   return (
     <>
-      <nav className="sticky top-16 z-40 bg-background border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex gap-1">
-          {/* Render one tab per JOB_TABS entry, underlining/coloring the tab matching the current route */}
-          {JOB_TABS.map(({ to, label }) => (
+      <nav className={inDashboard ? 'border-b mb-2' : 'sticky top-16 z-40 bg-background border-b'}>
+        <div className={inDashboard ? 'flex gap-1 overflow-x-auto' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex gap-1 overflow-x-auto'}>
+          {/* One tab per JOB_TABS entry, highlighting the tab matching the current route */}
+          {JOB_TABS.map(({ label, publicTo, dashboardTo }) => (
             <NavLink
-              key={to}
-              to={to}
+              key={label}
+              to={inDashboard ? dashboardTo : publicTo}
               end
               className={({ isActive }) =>
-                `px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                `px-4 py-3 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
                   isActive
                     ? 'border-primary text-primary'
                     : 'border-transparent text-muted-foreground hover:text-foreground'

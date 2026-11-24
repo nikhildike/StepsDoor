@@ -203,10 +203,16 @@ export default function App() {
             the sidebar visible when browsing tenders from their dashboard. */}
         <Route path="tenders" element={<Tenders />} />
         {/* Govt jobs (latest openings + portal directory) inside the job seeker dashboard. */}
-        <Route path="govt-jobs" element={<GovtJobs />} />
-        {/* Private job listings inside the student dashboard ("Jobs" in its sidebar). Not
-            /seeker/jobs — that's the contractor's My Jobs (ManageJobs) page. */}
-        <Route path="browse-jobs" element={<Jobs />} />
+        {/* The Jobs hub inside the dashboard ("Jobs" in the sidebar): the same tabs and pages
+            as the public /jobs section — private jobs (browse-jobs, not /seeker/jobs, which is
+            the contractor's My Jobs), companies, govt jobs, freelancing. */}
+        <Route element={<JobsLayout />}>
+          <Route path="browse-jobs" element={<Jobs />} />
+          <Route path="companies" element={<Companies />} />
+          <Route path="govt-jobs" element={<GovtJobs />} />
+          <Route path="freelancers" element={<Freelancers />} />
+        </Route>
+        <Route path="careers/:slug" element={<CompanyCareers />} />
         <Route path="browse-jobs/:id" element={<JobDetail />} />
         {/* Listing detail pages opened from the dashboard lists stay in the dashboard. */}
         <Route path="tenders/:id" element={<TenderDetail />} />

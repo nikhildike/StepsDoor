@@ -5,7 +5,7 @@
  * seekers and contractors; the sidebar nav items and role label adapt to the
  * signed-in user's role:
  *
- *   Job seeker:  Dashboard · Jobs · Govt Jobs · Saved Jobs · Alerts · My Profile
+ *   Job seeker:  Dashboard · Jobs (private / companies / govt / freelancing tabs) · Saved Jobs · Alerts · My Profile
  *   Contractor:  Dashboard · Tenders · Tender Alerts · Post a Job · My Jobs · My Profile
  *   (plus Shopping / Retail Stores / Services for both)
  *
@@ -15,8 +15,9 @@
  */
 import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
+import { DASHBOARD_JOB_HUB_PATHS } from '@/components/layout/JobsLayout'
 import { useAuth } from '@/hooks/useAuth'
-import { LayoutDashboard, Bookmark, Bell, User, LogOut, Menu, X, FileText, ShoppingBag, Store, Wrench, PlusCircle, Briefcase, Landmark } from 'lucide-react'
+import { LayoutDashboard, Bookmark, Bell, User, LogOut, Menu, X, FileText, ShoppingBag, Store, Wrench, PlusCircle, Briefcase } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
 // Browse links shown to job seekers and contractors. They point at /seeker/* copies
@@ -31,8 +32,8 @@ const BROWSE_NAV = [
 // Nav items shown to job seekers.
 const SEEKER_NAV = [
   { to: '/seeker',         label: 'Dashboard',     icon: LayoutDashboard, end: true },
-  { to: '/seeker/browse-jobs', label: 'Jobs',      icon: Briefcase },
-  { to: '/seeker/govt-jobs', label: 'Govt Jobs',   icon: Landmark },
+  // The Jobs hub: private jobs, companies, govt jobs and freelancing tabs (JobsLayout).
+  { to: '/seeker/browse-jobs', label: 'Jobs',      icon: Briefcase, activeFor: DASHBOARD_JOB_HUB_PATHS },
   { to: '/seeker/saved',   label: 'Saved Jobs',    icon: Bookmark },
   { to: '/seeker/alerts',  label: 'Alerts',        icon: Bell }, // job + government job alerts
   { to: '/seeker/profile', label: 'My Profile',    icon: User },
@@ -64,10 +65,13 @@ const CONTRACTOR_NAV = [
  *   - navItems — role-appropriate nav list (SEEKER_NAV or CONTRACTOR_NAV).
  */
 function SidebarContent({ user, signOut, onClose, navItems }) {
+  const { pathname } = useLocation()
+  // An item with `activeFor` (the Jobs hub) is highlighted on any of those paths and their sub-pages.
+  const hubActive = (paths) => paths?.some(p => pathname === p || pathname.startsWith(`${p}/`))
   return (
     <>
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navItems.map(({ to, label, icon: Icon, end }) => (
+        {navItems.map(({ to, label, icon: Icon, end, activeFor }) => (
           <NavLink
             key={to}
             to={to}
@@ -75,7 +79,7 @@ function SidebarContent({ user, signOut, onClose, navItems }) {
             onClick={onClose}
             className={({ isActive }) => cn(
               'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
+              isActive || hubActive(activeFor)
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
             )}
