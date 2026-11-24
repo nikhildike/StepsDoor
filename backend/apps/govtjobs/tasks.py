@@ -115,7 +115,8 @@ def match_govtjob_alerts():
 
     counts = send_alert_digests(
         GovtJobAlert.objects.filter(is_active=True).select_related('user'),
-        AlertKind(noun='government jobs', label='government job', user_of=lambda a: a.user, match=match, to_item=to_item),
+        AlertKind(noun='government jobs', label='government job', user_of=lambda a: a.user, match=match, to_item=to_item,
+                  push_kind='govt_job'),
     )
     logger.info(f"match_govtjob_alerts: {counts}")
     return counts

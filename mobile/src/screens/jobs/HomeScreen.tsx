@@ -141,14 +141,22 @@ function CompanyCard({ company, onPress }: { company: Company; onPress: () => vo
 
 /**
  * Renders the segmented row plus whichever of Jobs/Govt Jobs/Companies is
- * active. Reads no route params; `navigation` is used to push
+ * active. Optional route param `segment` ('jobs' | 'govtJobs' | 'companies')
+ * picks the starting segment (used by push-notification taps); `navigation` is used to push
  * `JobDetail`/`GovtJobDetail` on a card tap. Use case: default landing
  * view of the Jobs tab, giving a job seeker a persistent way to switch
  * between browsing private listings, government jobs, and companies
  * without those feeling like separate destinations.
  */
-export function HomeScreen({ navigation }: { navigation: any }) {
+export function HomeScreen({ navigation, route }: { navigation: any; route?: any }) {
   const [segment, setSegment] = useState<Segment>('jobs');
+  // A push-notification tap can open this screen on a given segment
+  // (route param `segment`, see services/notificationRouting.ts). Applied on
+  // each new navigation, then the user's own segment taps take over.
+  const requestedSegment: Segment | undefined = route?.params?.segment;
+  useEffect(() => {
+    if (requestedSegment) setSegment(requestedSegment);
+  }, [requestedSegment, route?.key, route?.params]);
   const Colors = useThemeColors();
   const styles = makeStyles(Colors);
 

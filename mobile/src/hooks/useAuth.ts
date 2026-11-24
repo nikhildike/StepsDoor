@@ -11,6 +11,7 @@
 import { useCallback } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { authService } from '@/services/authService';
+import { unregisterPushNotifications } from '@/services/notificationService';
 
 /**
  * Provides the current auth state and actions to sign a job seeker in,
@@ -53,11 +54,13 @@ export function useAuth() {
   }, [setAuth]);
 
   /**
-   * Sign the current user out, clearing tokens from both memory and
+   * Sign the current user out: unregister this device from alert pushes (while the
+   * auth token is still valid for that request), then clear tokens from memory and
    * AsyncStorage via the auth store's `logout` action.
    * @remarks Called from Profile/settings screens' logout action.
    */
   const signOut = useCallback(async () => {
+    await unregisterPushNotifications(); // never throws — sign-out can't fail because of push
     await logout();
   }, [logout]);
 

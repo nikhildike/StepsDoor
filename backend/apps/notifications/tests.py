@@ -1,9 +1,10 @@
 """
-Tests for alert digest emails (apps.notifications.alert_emails) and the three daily
-matching tasks that use it: match_tender_alerts, match_govtjob_alerts, match_job_alerts.
+Tests for alert digests (apps.notifications.alert_emails) - email and push - the three
+daily matching tasks that use them, the Expo push sender (apps.notifications.push) and
+the device push-token API (PushTokenView).
 
-Mail goes to Django's in-memory test outbox (the test runner swaps in locmem), so
-nothing is sent; time is moved by back-dating `created_at`/`last_checked_at`.
+Mail goes to Django's in-memory test outbox (the test runner swaps in locmem) and every
+test that registers a device patches requests.post, so nothing leaves the machine; time is moved by back-dating `created_at`/`last_checked_at`.
 """
 from datetime import timedelta
 from unittest import mock
@@ -59,7 +60,7 @@ class TenderAlertDigestTests(TestCase):
         self.tender('2026_HRY_3_1', 'Drain cleaning')                     # no keyword match
 
         counts = match_tender_alerts()
-        self.assertEqual(counts, {'users_emailed': 1, 'listings_sent': 1, 'failed': 0})
+        self.assertEqual(counts, {'users_emailed': 1, 'users_pushed': 0, 'listings_sent': 1, 'failed': 0})
         self.assertEqual(len(mail.outbox), 1)
         email = mail.outbox[0]
         self.assertEqual(email.to, ['firm@example.com'])
@@ -192,3 +193,185 @@ class InrFormatTests(TestCase):
         self.assertEqual(inr(100000), '₹1,00,000')
         self.assertEqual(inr(1228141.75), '₹12,28,141')
         self.assertEqual(inr(130707970), '₹13,07,07,970')
+
+
+EXPO_TOKEN = 'ExponentPushToken[aaaaaaaaaaaaaaaaaaaaaa]'
+
+
+def expo_response(*tickets):
+    """A fake requests.Response from Expo's push API carrying the given tickets."""
+    response = mock.Mock(status_code=200)
+    response.json.return_value = {'data': list(tickets)}
+    response.raise_for_status.return_value = None
+    return response
+
+
+OK_TICKET = {'status': 'ok', 'id': 'receipt-1'}
+GONE_TICKET = {'status': 'error', 'message': 'not registered', 'details': {'error': 'DeviceNotRegistered'}}
+
+
+class PushTokenApiTests(TestCase):
+    """POST/DELETE /api/notifications/push-token/."""
+
+    URL = '/api/notifications/push-token/'
+
+    def setUp(self):
+        """Two accounts that might share a phone."""
+        from rest_framework.test import APIClient
+        self.alice = User.objects.create_user(username='alice', email='a@example.com', password='x')
+        self.bob = User.objects.create_user(username='bob', email='b@example.com', password='x')
+        self.api = APIClient()
+
+    def test_requires_login(self):
+        """Anonymous registration is refused."""
+        self.assertEqual(self.api.post(self.URL, {'token': EXPO_TOKEN}, format='json').status_code, 401)
+
+    def test_register_is_idempotent_and_moves_between_accounts(self):
+        """201 then 200 for the same user; a second account on the same device takes the token over."""
+        from apps.notifications.models import FCMToken
+        self.api.force_authenticate(self.alice)
+        self.assertEqual(self.api.post(self.URL, {'token': EXPO_TOKEN}, format='json').status_code, 201)
+        self.assertEqual(self.api.post(self.URL, {'token': EXPO_TOKEN}, format='json').status_code, 200)
+        self.api.force_authenticate(self.bob)
+        self.api.post(self.URL, {'token': EXPO_TOKEN}, format='json')
+        self.assertEqual(list(FCMToken.objects.values_list('user__username', flat=True)), ['bob'])
+
+    def test_rejects_non_expo_tokens(self):
+        """Raw FCM tokens can't be sent through Expo, so they're refused."""
+        self.api.force_authenticate(self.alice)
+        self.assertEqual(self.api.post(self.URL, {'token': 'fcm-raw-token-123'}, format='json').status_code, 400)
+
+    def test_delete_only_removes_own_token(self):
+        """Sign-out removes the caller's token; another user's DELETE can't remove it."""
+        from apps.notifications.models import FCMToken
+        FCMToken.objects.create(user=self.alice, token=EXPO_TOKEN)
+        self.api.force_authenticate(self.bob)
+        self.assertEqual(self.api.delete(self.URL, {'token': EXPO_TOKEN}, format='json').status_code, 204)
+        self.assertTrue(FCMToken.objects.exists())
+        self.api.force_authenticate(self.alice)
+        self.api.delete(self.URL, {'token': EXPO_TOKEN}, format='json')
+        self.assertFalse(FCMToken.objects.exists())
+
+
+class ExpoPushSenderTests(TestCase):
+    """apps.notifications.push.send_push against a mocked Expo API."""
+
+    def setUp(self):
+        """A user with one registered device."""
+        from apps.notifications.models import FCMToken
+        self.user = User.objects.create_user(username='u', email='u@example.com', password='x')
+        FCMToken.objects.create(user=self.user, token=EXPO_TOKEN)
+
+    def test_message_format(self):
+        """POSTs to exp.host with title/body/data on the 'default' Android channel, no auth header by default."""
+        from apps.notifications.push import EXPO_PUSH_URL, send_push
+        with mock.patch('apps.notifications.push.requests.post', return_value=expo_response(OK_TICKET)) as post:
+            self.assertEqual(send_push(self.user, 'T', 'B', {'kind': 'tender'}), 1)
+        self.assertEqual(post.call_args.args[0], EXPO_PUSH_URL)
+        [message] = post.call_args.kwargs['json']
+        self.assertEqual(message['to'], EXPO_TOKEN)
+        self.assertEqual((message['title'], message['body'], message['data']), ('T', 'B', {'kind': 'tender'}))
+        self.assertEqual(message['channelId'], 'default')
+        self.assertNotIn('Authorization', post.call_args.kwargs['headers'])
+
+    def test_batches_of_100(self):
+        """Expo accepts at most 100 messages per request."""
+        from apps.notifications.models import FCMToken
+        from apps.notifications.push import send_push
+        FCMToken.objects.bulk_create(
+            FCMToken(user=self.user, token=f'ExponentPushToken[{i:022d}]') for i in range(149)
+        )  # 150 devices in total
+        with mock.patch('apps.notifications.push.requests.post',
+                        side_effect=lambda url, json, **kw: expo_response(*[OK_TICKET] * len(json))) as post:
+            self.assertEqual(send_push(self.user, 'T', 'B'), 150)
+        self.assertEqual([len(c.kwargs['json']) for c in post.call_args_list], [100, 50])
+
+    def test_unregistered_device_token_is_deleted(self):
+        """A DeviceNotRegistered ticket removes the token so it isn't used again."""
+        from apps.notifications.models import FCMToken
+        from apps.notifications.push import send_push
+        with mock.patch('apps.notifications.push.requests.post', return_value=expo_response(GONE_TICKET)):
+            self.assertEqual(send_push(self.user, 'T', 'B'), 0)
+        self.assertFalse(FCMToken.objects.exists())
+
+    def test_network_failure_is_logged_not_raised(self):
+        """Expo being unreachable doesn't raise into the alert run."""
+        import requests
+        from apps.notifications.push import send_push
+        with mock.patch('apps.notifications.push.requests.post', side_effect=requests.ConnectionError('down')), \
+                self.assertLogs('apps.notifications.push', level='ERROR'):
+            self.assertEqual(send_push(self.user, 'T', 'B'), 0)
+
+    @override_settings(PUSH_NOTIFICATIONS_ENABLED=False)
+    def test_disabled(self):
+        """PUSH_NOTIFICATIONS_ENABLED=False sends nothing."""
+        from apps.notifications.push import send_push
+        with mock.patch('apps.notifications.push.requests.post') as post:
+            self.assertEqual(send_push(self.user, 'T', 'B'), 0)
+        post.assert_not_called()
+
+
+@override_settings(FRONTEND_URL='https://stepsdoor.in')
+class AlertPushTests(TestCase):
+    """Push alongside (or instead of) the email digest."""
+
+    def setUp(self):
+        """A tender alert from yesterday and one matching tender created now."""
+        self.user = User.objects.create_user(username='firm', email='firm@example.com', password='x')
+        backdate(TenderAlert.objects.create(user=self.user, keyword='road'),
+                 created_at=timezone.now() - timedelta(days=1))
+        self.tender = self.make_tender('2026_HRY_1_1', 'Road repair Ward 8')
+
+    @staticmethod
+    def make_tender(tender_id, title):
+        """An active Haryana tender created now."""
+        return Tender.objects.create(
+            source_portal='etenders.hry.nic.in', tender_id=tender_id, title=title, organisation='MC Karnal',
+            state='Haryana', published_at=timezone.now(), source_url='https://etenders.hry.nic.in/nicgep/app',
+        )
+
+    def register_device(self):
+        """Give the alert owner a registered phone."""
+        from apps.notifications.models import FCMToken
+        FCMToken.objects.create(user=self.user, token=EXPO_TOKEN)
+
+    def test_email_and_push(self):
+        """A user with email and a device gets both; a single match carries its id for the tap."""
+        self.register_device()
+        with mock.patch('apps.notifications.push.requests.post', return_value=expo_response(OK_TICKET)) as post:
+            counts = match_tender_alerts()
+        self.assertEqual((counts['users_emailed'], counts['users_pushed']), (1, 1))
+        [message] = post.call_args.kwargs['json']
+        self.assertEqual(message['title'], '1 new tender match')
+        self.assertEqual(message['body'], 'Road repair Ward 8')
+        self.assertEqual(message['data'], {'type': 'alert_digest', 'kind': 'tender', 'count': 1, 'id': self.tender.pk})
+
+    def test_push_only_user_is_reached(self):
+        """No email address but the app installed → push only, and the alert advances."""
+        User.objects.filter(pk=self.user.pk).update(email='')
+        self.register_device()
+        with mock.patch('apps.notifications.push.requests.post', return_value=expo_response(OK_TICKET)):
+            counts = match_tender_alerts()
+        self.assertEqual((counts['users_emailed'], counts['users_pushed'], counts['listings_sent']), (0, 1, 1))
+        self.assertEqual(mail.outbox, [])
+        self.assertIsNotNone(TenderAlert.objects.get().last_checked_at)
+
+    def test_failed_email_skips_push_until_retry(self):
+        """If the email fails, nothing is pushed either — the retry next run sends both once."""
+        self.register_device()
+        with mock.patch('django.core.mail.EmailMultiAlternatives.send', side_effect=OSError('down')), \
+                mock.patch('apps.notifications.push.requests.post') as post, \
+                self.assertLogs('apps.notifications.alert_emails', level='ERROR'):
+            match_tender_alerts()
+        post.assert_not_called()
+
+    def test_several_matches_open_the_list(self):
+        """With 2+ matches the payload has no id, so the app opens the list."""
+        self.make_tender('2026_HRY_2_1', 'Road widening')
+        self.register_device()
+        with mock.patch('apps.notifications.push.requests.post', return_value=expo_response(OK_TICKET)) as post:
+            match_tender_alerts()
+        [message] = post.call_args.kwargs['json']
+        self.assertEqual(message['title'], '2 new tender matches')
+        self.assertTrue(message['body'].endswith(' and 1 more'))
+        self.assertIsNone(message['data']['id'])

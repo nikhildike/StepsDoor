@@ -30,6 +30,8 @@ urlpatterns = [
     path('api/payments/', include('apps.payments.urls')),
     path('api/analytics/', include('apps.analytics.urls')),
     path('api/alerts/', include('apps.alerts.urls')),
+    # Device push-token registration for alert push notifications (mobile app).
+    path('api/notifications/', include('apps.notifications.urls')),
 
     # Government tenders & jobs — scraped/free-to-browse content (see
     # apps.tenders / apps.govtjobs and the scrapers/ Scrapy project).

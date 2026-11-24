@@ -71,7 +71,8 @@ def match_job_alerts():
 
     counts = send_alert_digests(
         JobAlert.objects.filter(is_active=True).select_related('job_seeker__user'),
-        AlertKind(noun='jobs', label='job', user_of=lambda a: a.job_seeker.user, match=match, to_item=to_item),
+        AlertKind(noun='jobs', label='job', user_of=lambda a: a.job_seeker.user, match=match, to_item=to_item,
+                  push_kind='job'),
     )
     logger.info(f"match_job_alerts: {counts}")
     return counts

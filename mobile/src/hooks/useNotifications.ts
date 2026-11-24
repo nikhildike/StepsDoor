@@ -1,71 +1,63 @@
 /**
  * hooks/useNotifications.ts
  *
- * Wires up the push-notification lifecycle for the app: once a user is
- * signed in, registers for FCM push notifications and subscribes to
- * foreground notification events (received + tapped/responded). Mounted
- * once at the app root via `App.tsx`'s `NotificationSetup` component —
- * not tied to any particular screen.
+ * Push-notification lifecycle for the whole app, mounted once via `App.tsx`'s
+ * `NotificationSetup` (above the NavigationContainer, so it navigates through
+ * `navigationRef`):
+ *   - once a user is signed in, registers the device for alert pushes
+ *     (`notificationService.registerForPushNotifications`);
+ *   - when the user taps a notification — while the app is open, in the
+ *     background, or when the tap launched it from closed — opens the screen
+ *     its data points at (`notificationRouting.routeForNotification`).
  */
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotifications } from '@/services/notificationService';
+import { routeForNotification } from '@/services/notificationRouting';
+import { navigationRef } from '@/navigation/navigationRef';
 import { useAuthStore } from '@/store/authStore';
 
 /**
- * Registers the device for push notifications and listens for
- * notification events while a user is authenticated. Re-runs whenever
- * the auth `token` changes (e.g. on login/logout), and unsubscribes its
- * listeners on cleanup to avoid duplicate/stale handlers.
- *
- * @remarks Has no return value — it's a side-effect-only hook. Mounted
- *   once at the app root (`App.tsx`) so push registration and
- *   notification handling are active app-wide regardless of which screen
- *   is focused.
+ * Opens the screen for a tapped notification. Only plain taps count (not action
+ * buttons); waits briefly if the navigator isn't mounted yet (cold start, while
+ * the splash screen loads the session).
+ */
+function openFromResponse(response: Notifications.NotificationResponse, attempt = 0) {
+  if (response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
+  const route = routeForNotification(response.notification.request.content.data as Record<string, unknown>);
+  if (!route) return;
+  if (!navigationRef.isReady()) {
+    if (attempt < 20) setTimeout(() => openFromResponse(response, attempt + 1), 250); // up to ~5 s
+    return;
+  }
+  navigationRef.navigate(route.name, route.params);
+}
+
+/**
+ * Side-effect-only hook: registers for push while signed in (re-runs on sign-in /
+ * account switch via the auth `token`), and handles notification taps app-wide.
  */
 export function useNotifications() {
   const { token } = useAuthStore();
-  // Refs (rather than state) hold the listener subscriptions since they
-  // don't need to trigger re-renders — they're only used for cleanup.
-  const notificationListener = useRef<any>();
-  const responseListener = useRef<any>();
 
+  // Register this device for the signed-in user. Guests have no account to notify.
   useEffect(() => {
-    // Don't register for push / attach listeners until a user is signed
-    // in — an anonymous session has no backend user to associate the
-    // push token with.
-    if (!token) return;
-
-    // Push-token lifecycle: request permission, fetch the Expo/FCM push
-    // token, and register it with the backend (see
-    // `notificationService.registerForPushNotifications` for the full
-    // permission → token → backend-registration flow).
-    registerForPushNotifications();
-
-    // Fires when a notification arrives while the app is in the
-    // foreground (see the handler configured in `notificationService.ts`
-    // that keeps foreground alerts visible).
-    notificationListener.current = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        console.log('Notification received:', notification);
-      }
-    );
-
-    // Fires when the user taps/interacts with a notification (whether
-    // the app was foregrounded, backgrounded, or launched from it).
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        console.log('Notification response:', response);
-        // TODO: Navigate to relevant screen based on notification data
-      }
-    );
-
-    // Cleanup: remove both listeners when the token changes or the
-    // component unmounts, preventing duplicate handlers from
-    // accumulating across re-registrations.
-    return () => {
-      notificationListener.current?.remove();
-      responseListener.current?.remove();
-    };
+    if (token) registerForPushNotifications();
   }, [token]);
+
+  // Taps: one launched the app from closed (handled once, then cleared so it isn't
+  // replayed), and any tap while the app is running or in the background.
+  useEffect(() => {
+    let cancelled = false;
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (cancelled || !response) return;
+      openFromResponse(response);
+      Notifications.clearLastNotificationResponseAsync();
+    });
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => openFromResponse(response));
+    return () => {
+      cancelled = true;
+      subscription.remove();
+    };
+  }, []);
 }

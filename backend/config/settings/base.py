@@ -402,13 +402,17 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL  # sender for Django's own error mail to ADMIN
 
 
 # ===========================================================================
-# FIREBASE
+# PUSH NOTIFICATIONS (Expo)
 # ===========================================================================
 
-# Path to the Firebase service-account JSON credentials file, used by
-# apps.notifications to send FCM push notifications (job alerts, tender
-# alerts) to the Expo mobile app.
-FIREBASE_CREDENTIALS_PATH = config('FIREBASE_CREDENTIALS_PATH', default='')
+# Alert digests are also sent as push notifications through Expo's push service
+# (apps.notifications.push → https://exp.host/--/api/v2/push/send), which forwards
+# to FCM (Android) and APNs (iOS). The server needs no Firebase credentials — the
+# FCM V1 service-account key is uploaded to the Expo project (EAS) instead; see
+# CLAUDE.md "Push notifications". Turn off with PUSH_NOTIFICATIONS_ENABLED=False.
+PUSH_NOTIFICATIONS_ENABLED = config('PUSH_NOTIFICATIONS_ENABLED', default=True, cast=bool)
+# Only needed if "enhanced push security" is enabled in the Expo dashboard.
+EXPO_PUSH_ACCESS_TOKEN = config('EXPO_PUSH_ACCESS_TOKEN', default='')
 
 
 # ===========================================================================

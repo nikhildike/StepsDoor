@@ -14,6 +14,7 @@ razorpay>=1.4
 psycopg2-binary>=2.9
 django-anymail[sendgrid]>=13.0  # transactional email via SendGrid (production EMAIL_BACKEND)
 dj-database-url>=2.1
+requests>=2.31  # Expo push API calls (apps/notifications/push.py)
 django-storages>=1.14
 django-import-export>=4.0
 openpyxl>=3.1  # .xlsx import/export (import-export, apps/stores/admin.py)

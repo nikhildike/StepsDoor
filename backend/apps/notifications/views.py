@@ -1,35 +1,44 @@
-"""API views for the notifications app.
-
-Exposes the FCM device-token registration endpoints consumed by the mobile
-app (and, in principle, the web app) so the backend knows where to deliver
-push notifications for a given user.
 """
+API views for the notifications app.
 
-from rest_framework import viewsets, permissions
+`PushTokenView` lets the mobile app register the device's Expo push token after
+sign-in and remove it on sign-out, so alert digests (apps.notifications.alert_emails)
+can also reach the user as push notifications (apps.notifications.push).
+"""
+from rest_framework import permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import FCMToken
-from .serializers import FCMTokenSerializer
+from .serializers import PushTokenSerializer
 
 
-class FCMTokenViewSet(viewsets.ModelViewSet):
-    """Manage Firebase Cloud Messaging tokens for push notifications.
-
-    A standard authenticated CRUD endpoint used by client apps to register
-    a device token after login/app start and to remove it on logout, so
-    that Celery alert-matching tasks (e.g. job/tender alert dispatch) know
-    which devices belong to which user.
+class PushTokenView(APIView):
     """
-    serializer_class = FCMTokenSerializer
+    POST   /api/notifications/push-token/  {"token": "ExponentPushToken[...]"} — register this device
+    DELETE /api/notifications/push-token/  {"token": "..."}                    — unregister it
+
+    POST is idempotent and safe to call on every app start: a token identifies a device,
+    so registering one already held by another account moves it to the caller (the
+    previous user signed out on this phone). Responds 201 when created, 200 otherwise.
+    DELETE only removes the caller's own token and always answers 204, so sign-out can
+    fire it without caring whether the token was registered.
+    """
     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
-        """Restrict results to FCM tokens owned by the requesting user only."""
-        return FCMToken.objects.filter(user=self.request.user)
+    def post(self, request):
+        """Register (or re-assign) the device token for the signed-in user."""
+        serializer = PushTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        _, created = FCMToken.objects.update_or_create(
+            token=serializer.validated_data['token'],
+            defaults={'user': request.user},
+        )
+        return Response({'token': serializer.validated_data['token']},
+                        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
-    def perform_create(self, serializer):
-        """Force the new token's `user` to the authenticated request user.
-
-        Prevents a client from registering a token under someone else's
-        account by supplying a different `user` value in the request body.
-        """
-        serializer.save(user=self.request.user)
+    def delete(self, request):
+        """Remove the device token if it belongs to the signed-in user."""
+        token = (request.data or {}).get('token', '')
+        FCMToken.objects.filter(user=request.user, token=token).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

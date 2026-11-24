@@ -53,7 +53,7 @@ Tick each item off as it's done.
 - [ ] **Turn the scrapers on.** All `ScraperSource` rows are currently inactive in the local database. Switch on the ones you want in production.
 - [ ] **Create the periodic tasks** in Django admin (Periodic Tasks): `scrape_all_portals` and `match_tender_alerts`.
 - [ ] **Finish the alert TODOs** in `apps/tenders/tasks.py` and `apps/govtjobs/tasks.py`. Alert notifications are not implemented yet.
-- [ ] **Firebase (optional at launch).** For push notifications, upload the Firebase credentials file and set `FIREBASE_CREDENTIALS_PATH`.
+- [ ] **Push notifications (optional at launch).** Alerts are pushed through Expo's push service, so the server needs no Firebase file. One-time setup: run `eas init` in `mobile/` (adds the project ID), upload the Firebase FCM V1 service-account key to the Expo project (`eas credentials`), and add `google-services.json` to the app — see CLAUDE.md "Push notifications".
 
 ---
 

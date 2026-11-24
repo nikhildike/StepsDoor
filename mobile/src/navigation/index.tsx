@@ -24,6 +24,7 @@
  */
 import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { navigationRef } from './navigationRef';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthNavigator } from './AuthNavigator';
 import { AppNavigator } from './AppNavigator';
@@ -70,7 +71,8 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    // navigationRef lets useNotifications (outside this tree) open a screen from a push tap.
+    <NavigationContainer ref={navigationRef}>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
         {/* Always the landing screen — browsing jobs/tenders/govt jobs never requires auth. */}
         <RootStack.Screen name="App" component={AppNavigator} />

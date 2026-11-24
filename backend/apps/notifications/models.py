@@ -1,38 +1,37 @@
 """Models for the notifications app.
 
-Currently holds `FCMToken`, which records the Firebase Cloud Messaging
-device tokens registered by each user's mobile client so the backend can
-target push notifications (e.g. job alerts, tender alerts) at that device.
+Holds `FCMToken`: the push token of each signed-in mobile device, so alert
+digests can also go out as push notifications (apps.notifications.push).
+Despite the historical name, the tokens are Expo push tokens
+("ExponentPushToken[...]") — the app gets them from expo-notifications and the
+backend sends through Expo's push service, which forwards to FCM/APNs.
 """
 
 from django.db import models
 
 
 class FCMToken(models.Model):
-    """A single device's Firebase Cloud Messaging registration token.
+    """One mobile device's Expo push token, owned by the user signed in on it.
 
-    Created when a user's mobile app calls the FCM token registration
-    endpoint (typically on login or app start) so Celery tasks such as the
-    alert-matching job can look up a user's device(s) and send a push
-    notification via Firebase.
+    Registered by the app via POST /api/notifications/push-token/ after sign-in
+    (PushTokenView), removed on sign-out (DELETE) or when Expo reports the
+    device unregistered (apps.notifications.push). A token identifies a device,
+    so it's unique: if another user signs in on the same phone, the row moves
+    to them rather than notifying both accounts.
     """
     user = models.ForeignKey(
         'authentication.User',
         on_delete=models.CASCADE,  # Delete a user's tokens when the user account is deleted.
         related_name='fcm_tokens',  # Access via user.fcm_tokens.all().
     )
-    # The opaque FCM device/registration token issued by Firebase to the client app.
-    # TextField because FCM tokens are long and have no fixed max length guarantee.
-    token = models.TextField()
+    # Expo push token, e.g. "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"; unique per device.
+    token = models.CharField(max_length=255, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)  # Timestamp set once, at creation, for auditing/debugging.
 
     class Meta:
         verbose_name = 'FCM Token'
         verbose_name_plural = 'FCM Tokens'
-        # Prevent the same device token from being registered twice for the same user
-        # (re-registration on app relaunch should be a no-op, not a duplicate row).
-        unique_together = ('user', 'token')
 
     def __str__(self):
         """Human-readable representation shown in the Django admin and shell."""
-        return f"FCM token for {self.user}"
+        return f"Push token for {self.user}"

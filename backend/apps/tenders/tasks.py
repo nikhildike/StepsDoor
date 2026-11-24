@@ -114,7 +114,8 @@ def match_tender_alerts():
 
     counts = send_alert_digests(
         TenderAlert.objects.filter(is_active=True).select_related('user'),
-        AlertKind(noun='government tenders', label='tender', user_of=lambda a: a.user, match=match, to_item=to_item),
+        AlertKind(noun='government tenders', label='tender', user_of=lambda a: a.user, match=match, to_item=to_item,
+                  push_kind='tender'),
     )
     logger.info(f"match_tender_alerts: {counts}")
     return counts

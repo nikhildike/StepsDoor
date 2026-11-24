@@ -1,6 +1,6 @@
 """Django admin registrations for the notifications app.
 
-Exposes `FCMToken` (device tokens used for Firebase Cloud Messaging push
+Exposes `FCMToken` (Expo push tokens of signed-in devices, used for alert push
 notifications) in the Django admin so staff can inspect/debug which users
 have registered which devices.
 """

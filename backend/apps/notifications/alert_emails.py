@@ -1,5 +1,5 @@
 """
-Alert digest emails — the shared engine behind every "new listings match your alert" email.
+Alert digests — the shared engine behind every "new listings match your alert" email and push.
 
 Used by the daily matching tasks for all three alert kinds:
   - apps.tenders.tasks.match_tender_alerts   (TenderAlert  → Tender)
@@ -67,12 +67,15 @@ class AlertKind:
     - user_of: alert → User who receives the email
     - match: (alert, since) → queryset of listings created after `since` matching the alert
     - to_item: listing → DigestItem
+    - push_kind: "tender" | "govt_job" | "job" — tells the mobile app which screen a
+      tapped push should open (see mobile/src/services/notificationRouting.ts)
     """
     noun: str
     label: str
     user_of: callable
     match: callable
     to_item: callable
+    push_kind: str = ''
 
 
 @dataclass
@@ -84,8 +87,14 @@ class _UserDigest:
 
 def send_alert_digests(alerts, kind: AlertKind):
     """
-    Match `alerts` (active alert objects with `last_checked_at`/`created_at`) and email
-    each owner one digest. Returns a dict of counts: users_emailed, listings_sent, failed.
+    Match `alerts` (active alert objects with `last_checked_at`/`created_at`) and send
+    each owner one digest: an email if they have an address, plus a push notification to
+    each device they've registered (apps.notifications.push). Returns a dict of counts:
+    users_emailed, users_pushed, listings_sent (to users reached either way), failed.
+
+    Email is the retried channel: if it fails, the user's alerts aren't advanced and no
+    push is sent, so the next run delivers both once. Push is best-effort and never
+    blocks a run.
     """
     run_started = timezone.now()
     digests = {}
@@ -97,23 +106,52 @@ def send_alert_digests(alerts, kind: AlertKind):
         for listing in kind.match(alert, since):
             digest.listings.setdefault(listing.pk, listing)
 
-    counts = {'users_emailed': 0, 'listings_sent': 0, 'failed': 0}
+    counts = {'users_emailed': 0, 'users_pushed': 0, 'listings_sent': 0, 'failed': 0}
     for user, digest in digests.values():
-        if digest.listings:
-            if not (user.is_active and user.email):
-                logger.info(f'Alert digest skipped for user {user.pk}: no email address or inactive account.')
-            else:
+        listings = list(digest.listings.values())
+        if listings and not user.is_active:
+            logger.info(f'Alert digest skipped for user {user.pk}: inactive account.')
+        elif listings:
+            if user.email:
                 try:
-                    _send_digest(user, kind, [kind.to_item(l) for l in digest.listings.values()])
+                    _send_digest(user, kind, [kind.to_item(l) for l in listings])
                 except Exception:
-                    # Leave last_checked_at alone so the next run retries these listings.
+                    # Leave last_checked_at alone (and skip push) so the next run retries both once.
                     logger.exception(f'Alert digest to user {user.pk} failed; will retry next run.')
                     counts['failed'] += 1
                     continue
                 counts['users_emailed'] += 1
-                counts['listings_sent'] += len(digest.listings)
+            pushed = _push_digest(user, kind, listings)
+            counts['users_pushed'] += 1 if pushed else 0
+            if user.email or pushed:
+                counts['listings_sent'] += len(listings)
+            else:
+                logger.info(f'Alert digest skipped for user {user.pk}: no email address and no registered device.')
         type(digest.alerts[0]).objects.filter(pk__in=[a.pk for a in digest.alerts]).update(last_checked_at=run_started)
     return counts
+
+
+def _push_digest(user, kind, listings):
+    """
+    Push a one-line summary of the digest to the user's devices; returns messages accepted.
+
+    Payload `data` = {type: "alert_digest", kind, count, id}: `id` is the listing's pk when
+    there's exactly one match, so a tap opens it directly; otherwise the app opens the list.
+    """
+    from apps.notifications.push import send_push  # local import: push imports models
+    n = len(listings)
+    first = listings[0]
+    body = first.title[:120] + (f' and {n - 1} more' if n > 1 else '')
+    try:
+        return send_push(
+            user,
+            title=f"{n} new {kind.label} match{'es' if n != 1 else ''}",
+            body=body,
+            data={'type': 'alert_digest', 'kind': kind.push_kind, 'count': n, 'id': first.pk if n == 1 else None},
+        )
+    except Exception:
+        logger.exception(f'Alert push to user {user.pk} failed (email, if any, already sent).')
+        return 0
 
 
 def _send_digest(user, kind, items):
