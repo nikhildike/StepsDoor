@@ -13,6 +13,7 @@ hardcoded, so the same codebase runs in dev and production without edits.
 from pathlib import Path
 from datetime import timedelta
 from decouple import config, Csv
+import dj_database_url  # parses DATABASE_URL into Django's DATABASES dict
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 # BASE_DIR points to backend/ (where manage.py lives)
@@ -137,20 +138,30 @@ ASGI_APPLICATION = 'config.asgi.application'
 # DATABASE
 # ===========================================================================
 
-# NOTE: DATABASE_URL is read from the environment (per CLAUDE.md, production
-# uses DigitalOcean Managed PostgreSQL 16 while dev uses SQLite), but the
-# DATABASES dict below currently always hardcodes the sqlite3 backend rather
-# than parsing DATABASE_URL — i.e. this env var is not actually consumed
-# here yet. Left as-is (no logic changes) since fixing that is outside the
-# scope of a documentation pass.
+# The database is chosen entirely by DATABASE_URL so the same settings serve
+# dev (SQLite, the default) and production (DigitalOcean Managed PostgreSQL
+# 16, e.g. "postgres://user:pass@host:25060/db?sslmode=require").
+# Postgres-only features (SearchVectorField population in Tender/GovtJob
+# save(), full-text search in their views) key off the resulting ENGINE.
 DATABASE_URL = config('DATABASE_URL', default='sqlite:///db.sqlite3')
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    # conn_max_age keeps Postgres connections open across requests (ignored
+    # in practice for SQLite); conn_health_checks drops stale ones first.
+    'default': dj_database_url.parse(
+        DATABASE_URL,
+        conn_max_age=config('DB_CONN_MAX_AGE', default=600, cast=int),
+        conn_health_checks=True,
+    ),
 }
+
+# A relative SQLite path ("sqlite:///db.sqlite3") would otherwise resolve
+# against the process CWD, which differs between runserver, Celery and
+# Scrapy — anchor it to backend/ so every process shares the same file.
+if DATABASES['default']['ENGINE'] == 'django.db.backends.sqlite3':
+    _sqlite_name = Path(DATABASES['default']['NAME'])
+    if not _sqlite_name.is_absolute():
+        DATABASES['default']['NAME'] = BASE_DIR / _sqlite_name
 
 
 # ===========================================================================

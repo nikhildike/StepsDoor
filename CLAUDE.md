@@ -76,6 +76,7 @@ scrapy crawl mahatenders -s SCRAPY_SETTINGS_MODULE=scrapers.settings
 - `AUTH_USER_MODEL = 'authentication.User'`
 - `Tender` and `GovtJob` both have a `SearchVectorField` with GIN index — populated in `save()` only when using PostgreSQL. On SQLite (dev), search falls back to DRF's `SearchFilter`.
 - Deduplication keys: `(source_portal, tender_id)` for Tender, `(source_portal, job_id)` for GovtJob.
+- **Database selection**: `DATABASES` is built from the `DATABASE_URL` env var via `dj-database-url` (default `sqlite:///db.sqlite3`, anchored to `backend/`). Set a `postgres://…?sslmode=require` URL to use PostgreSQL; the Postgres-only search paths check `DATABASES['default']['ENGINE']`.
 
 **API docs**: `http://localhost:8000/api/docs/` (Swagger), `http://localhost:8000/api/redoc/`
 
@@ -152,7 +153,7 @@ eas build --platform android  # cloud APK build (no Android Studio needed)
 | `components/navigation/` | BurgerMenu (persistent top bar with sign-in + hamburger) |
 | `data/` | Static data files, e.g. `companyDirectory.ts` (company listings not yet in DB) |
 | `store/` | authStore.ts (AsyncStorage), jobStore.ts, themeStore.ts (light/dark theme) |
-| `services/` | Same logic as web — api.ts uses `10.0.2.2:8000` for Android emulator; includes companyService.ts, serviceProviderService.ts |
+| `services/` | Same logic as web. `api.ts` resolves the API host per platform: web → `window.location.hostname`; physical device via Expo Go → the LAN IP from Metro's `hostUri` (so Django must run on `0.0.0.0:8000`); Android emulator/fallback → `10.0.2.2` |
 | `theme/` | colors.ts exports `useThemeColors()` hook (light/dark aware); typography.ts, spacing.ts — import from here, never hardcode values |
 
 **Path alias**: `@/` → `src/` (via `babel-plugin-module-resolver` in `babel.config.js`)
@@ -216,6 +217,16 @@ This codebase is documented with thorough, explanatory comments so it can be und
 - Comments-only changes must not alter behavior, logic, or formatting.
 
 When making future changes to this repo — new files, new functions, edits to existing ones — apply this same standard: add or update the relevant docstrings/comments as part of the change, don't leave new code uncommented.
+
+---
+
+## Other Docs in Repo Root
+
+- `OPTIMIZATIONS.md` — prioritised optimisation backlog with per-item checkboxes; tick items off as they're done.
+- `PRE_LAUNCH_CHECKLIST.md` — launch-readiness checklist.
+- `SHOPPING_AFFILIATE_PROGRAMS.md` — affiliate network setup (Cuelinks, Amazon Associates, EarnKaro) for the Shopping/Stores section.
+- `stepsdoor-tender-module-documentation.md` — detailed tender module write-up.
+- `STEPS.md` is a pasted terminal transcript, not maintained documentation.
 
 ---
 
