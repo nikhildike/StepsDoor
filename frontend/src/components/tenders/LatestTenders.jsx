@@ -7,9 +7,13 @@
  * (mounted at /tenders and, inside the contractor sidebar, /seeker/tenders).
  * Guests get the MembersOnly sign-in prompt and no request is made — the API
  * 401s anonymous calls and api.js would bounce them to /login.
+ *
+ * The keyword lives in the URL (`/tenders?search=road`), so the Home hero search
+ * and the navbar's "See all tenders" link open this list already filtered, and a
+ * filtered list can be bookmarked or shared.
  */
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Clock, MapPin, IndianRupee, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { tenderService } from '@/services/tenderService'
 import { useAuthStore } from '@/store/authStore'
@@ -84,8 +88,10 @@ function TenderRow({ tender }) {
  */
 export function LatestTenders() {
   const { token } = useAuthStore()
-  const [searchInput, setSearchInput] = useState('') // what's typed; applied after a pause
-  const [search, setSearch] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlSearch = searchParams.get('search') || '' // keyword from the URL (?search=...)
+  const [searchInput, setSearchInput] = useState(urlSearch) // what's typed; applied after a pause
+  const [search, setSearch] = useState(urlSearch)           // applied keyword sent to the API
   const [state, setState] = useState('')
   const [category, setCategory] = useState('')
   const [ordering, setOrdering] = useState(SORTS[0].value)
@@ -94,11 +100,21 @@ export function LatestTenders() {
   const [result, setResult] = useState(null)   // last API page: {count, results}
   const [loading, setLoading] = useState(false)
 
-  // Apply the search box 400 ms after typing stops, and go back to page 1.
+  // A new ?search= from outside (e.g. the navbar while already on this page) replaces the box.
   useEffect(() => {
-    const timer = setTimeout(() => { setSearch(searchInput.trim()); setPage(1) }, 400)
+    setSearchInput(urlSearch)
+  }, [urlSearch])
+
+  // Apply the search box 400 ms after typing stops: back to page 1, and mirror it in the URL.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const value = searchInput.trim()
+      setSearch(value)
+      setPage(1)
+      if (value !== urlSearch) setSearchParams(value ? { search: value } : {}, { replace: true })
+    }, 400)
     return () => clearTimeout(timer)
-  }, [searchInput])
+  }, [searchInput, urlSearch, setSearchParams])
 
   // State picker options (only states that currently have tenders).
   useEffect(() => {

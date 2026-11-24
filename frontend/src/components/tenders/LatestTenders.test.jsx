@@ -5,7 +5,7 @@
  */
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/services/tenderService', () => ({
@@ -29,8 +29,14 @@ import { useAuthStore } from '@/store/authStore'
 import { LatestTenders } from './LatestTenders'
 import Tenders from '@/pages/public/Tenders'
 
-function renderInRouter(ui) {
-  return render(<MemoryRouter>{ui}</MemoryRouter>)
+function renderInRouter(ui, url = '/tenders') {
+  return render(<MemoryRouter initialEntries={[url]}>{ui}</MemoryRouter>)
+}
+
+// Shows the router's current URL so tests can assert on ?search= syncing.
+function LocationProbe() {
+  const location = useLocation()
+  return <p data-testid="location">{location.pathname + location.search}</p>
 }
 
 describe('LatestTenders', () => {
@@ -62,6 +68,30 @@ describe('LatestTenders', () => {
     await waitFor(() => expect(tenderService.list).toHaveBeenLastCalledWith(
       expect.objectContaining({ state: 'Assam', ordering: 'submission_deadline', page: 1 }),
     ))
+  })
+})
+
+describe('LatestTenders search in the URL', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('applies ?search= from the URL on arrival (Home hero search, navbar "See all")', async () => {
+    useAuthStore.setState({ token: 'jwt', user: { is_contractor: true } })
+    renderInRouter(<LatestTenders />, '/tenders?search=road')
+    expect(screen.getByRole('searchbox')).toHaveValue('road')
+    await waitFor(() => expect(tenderService.list).toHaveBeenCalled())
+    expect(tenderService.list.mock.calls[0][0]).toEqual(expect.objectContaining({ search: 'road' }))
+  })
+
+  it('typing a keyword searches and updates the URL', async () => {
+    useAuthStore.setState({ token: 'jwt', user: { is_contractor: true } })
+    render(
+      <MemoryRouter initialEntries={['/tenders']}>
+        <Routes><Route path="/tenders" element={<><LatestTenders /><LocationProbe /></>} /></Routes>
+      </MemoryRouter>,
+    )
+    await userEvent.type(screen.getByRole('searchbox'), 'bridge')
+    await waitFor(() => expect(tenderService.list).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'bridge', page: 1 })))
+    expect(screen.getByTestId('location')).toHaveTextContent('/tenders?search=bridge')
   })
 })
 

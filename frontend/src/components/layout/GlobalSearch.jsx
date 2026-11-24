@@ -14,6 +14,8 @@ import { useNavigate, Link } from 'react-router-dom'
 import { Search, X, Briefcase, Building2, Landmark, FileText, ShoppingBag, Store, Wrench, Loader2 } from 'lucide-react'
 import { jobService } from '@/services/jobService'
 import { companyService } from '@/services/companyService'
+import { tenderService } from '@/services/tenderService'
+import { useAuthStore } from '@/store/authStore'
 import { useJobStore } from '@/store/jobStore'
 import { COMPANY_DIRECTORY } from '@/pages/public/Companies'
 import { CENTRAL_PORTALS, STATE_TENDERS } from '@/pages/public/Tenders'
@@ -47,6 +49,12 @@ export default function GlobalSearch() {
   const containerRef = useRef(null)
   const navigate = useNavigate()
   const setJobFilters = useJobStore(s => s.setFilters)
+  // Scraped tenders are members-only (the API 401s guests), so they're only searched with a token.
+  const { token, user } = useAuthStore()
+  const isContractor = !!user?.is_contractor
+  const [tenderResults, setTenderResults] = useState([]) // first few scraped tenders matching the query
+  const [tenderCount, setTenderCount] = useState(0)      // total matches, for the "See all" link
+  const [tendersLoading, setTendersLoading] = useState(false)
 
   // Load registered (paying) companies once on mount so they can be matched against
   // search queries client-side alongside the static COMPANY_DIRECTORY list.
@@ -68,6 +76,20 @@ export default function GlobalSearch() {
     }, 300)
     return () => clearTimeout(t)
   }, [query])
+
+  // Debounced scraped-tender search (members only), same 300 ms pattern as jobs above.
+  useEffect(() => {
+    const q = query.trim()
+    if (!q || !token) { setTenderResults([]); setTenderCount(0); return }
+    setTendersLoading(true)
+    const t = setTimeout(() => {
+      tenderService.list({ search: q, page_size: MAX_PER_SECTION })
+        .then(({ data }) => { setTenderResults(data.results ?? data); setTenderCount(data.count ?? 0) })
+        .catch(() => { setTenderResults([]); setTenderCount(0) })
+        .finally(() => setTendersLoading(false))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [query, token])
 
   // Closes the results dropdown when the user clicks anywhere outside the search
   // container (click-outside-to-dismiss behavior).
@@ -125,7 +147,7 @@ export default function GlobalSearch() {
 
   // Combined result count across all categories — used to decide whether to show
   // the "no results" empty state vs. the grouped results list.
-  const totalResults = jobResults.length + matchedCompanies.length + matchedTenders.length +
+  const totalResults = jobResults.length + tenderResults.length + matchedCompanies.length + matchedTenders.length +
     matchedGovtJobs.length + matchedShopping.length + matchedRetail.length + matchedServices.length
 
   // Navigates to the full Jobs listing page pre-filtered by the current query.
@@ -137,10 +159,18 @@ export default function GlobalSearch() {
     setOpen(false)
   }
 
-  // Keyboard shortcuts on the search input: Enter jumps to full job results,
-  // Escape closes the dropdown without clearing the query.
+  // Opens the full scraped-tender list on /tenders filtered by the current query.
+  function goToTenders() {
+    if (!query.trim()) return
+    navigate(`/tenders?search=${encodeURIComponent(query.trim())}`)
+    setOpen(false)
+  }
+
+  // Keyboard shortcuts on the search input: Enter jumps to the full results —
+  // tenders for contractors (their main content), jobs for everyone else —
+  // and Escape closes the dropdown without clearing the query.
   function handleKeyDown(e) {
-    if (e.key === 'Enter') goToJobs()
+    if (e.key === 'Enter') (isContractor && token ? goToTenders() : goToJobs())
     if (e.key === 'Escape') setOpen(false)
   }
 
@@ -174,7 +204,7 @@ export default function GlobalSearch() {
       {/* Results dropdown: only rendered while open and there's an active query */}
       {open && isSearching && (
         <div className="absolute mt-1 w-96 max-w-[90vw] right-0 bg-white border border-border rounded-lg shadow-lg max-h-[70vh] overflow-y-auto z-50">
-          {jobsLoading && totalResults === 0 ? (
+          {(jobsLoading || tendersLoading) && totalResults === 0 ? (
             // Loading state: shown only while the debounced job search is in flight and nothing has matched yet
             <div className="p-4 flex items-center justify-center text-muted-foreground text-sm gap-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Searching...
@@ -199,7 +229,22 @@ export default function GlobalSearch() {
                 )}
               </ResultSection>
 
-              <ResultSection title="Tenders" icon={Landmark}>
+              {/* Scraped tenders (members only), with a link to the full filtered list */}
+              <ResultSection title="Tenders" icon={FileText}>
+                {tenderResults.length > 0 ? [
+                  ...tenderResults.map(t => (
+                    <ResultItem key={`st-${t.id}`} onClick={() => setOpen(false)} to={`/tenders/${t.id}`}
+                      title={t.title} subtitle={[t.organisation, t.state].filter(Boolean).join(' · ')} />
+                  )),
+                  <button key="st-all" onClick={goToTenders}
+                    className="w-full text-left px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/5">
+                    See all {tenderCount.toLocaleString('en-IN')} tender{tenderCount === 1 ? '' : 's'} →
+                  </button>,
+                ] : null}
+              </ResultSection>
+
+              {/* Official tender portal directory (static, public) — portal names/states only */}
+              <ResultSection title="Tender portals" icon={Landmark}>
                 {matchedTenders.map(t => (
                   <ResultItem key={`t-${t.name}`} onClick={() => setOpen(false)} href={t.url} title={t.name} subtitle={t.category} />
                 ))}
