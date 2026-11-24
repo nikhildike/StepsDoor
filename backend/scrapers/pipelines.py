@@ -19,6 +19,7 @@ by `apps.tenders.scraping.run_source()` (Celery tasks), `run_scrapers`, or a
 bare `scrapy crawl <spider_name>`.
 """
 import logging
+import threading
 from zoneinfo import ZoneInfo
 
 from dateutil import parser as dateutil_parser
@@ -34,6 +35,18 @@ logger = logging.getLogger(__name__)
 # project's TIME_ZONE is UTC, so naive values must be pinned to IST explicitly
 # or every deadline ends up stored 5.5 hours late.
 PORTAL_TIMEZONE = ZoneInfo('Asia/Kolkata')
+
+# deferToThread runs saves on a thread pool, so a spider that yields a page of
+# items at once would issue concurrent writes — which SQLite rejects with
+# "database is locked". One crawl process saves at most a few dozen items, so
+# serializing its writes costs nothing and is correct on any database.
+_DB_WRITE_LOCK = threading.Lock()
+
+
+def _serialized(save, item):
+    """Run one pipeline save (in a worker thread) while holding the process-wide write lock."""
+    with _DB_WRITE_LOCK:
+        return save(item)
 
 
 def _parse_dt(value):
@@ -73,8 +86,8 @@ def _is_open(deadline):
 class TenderPipeline:
     """
     Persists scraped tender items (those with a 'tender_id' key) to the Tender
-    model — targets tender portals handled by GenericTenderSpider and
-    MahatendersSpider. Runs first in ITEM_PIPELINES (priority 300).
+    model — targets NIC eProcurement portals handled by GenericTenderSpider.
+    Runs first in ITEM_PIPELINES (priority 300).
     """
 
     def process_item(self, item, spider):
@@ -86,7 +99,7 @@ class TenderPipeline:
         """
         if 'tender_id' not in item:
             return item
-        return deferToThread(self._save_tender, dict(item))
+        return deferToThread(_serialized, self._save_tender, dict(item))
 
     def _save_tender(self, item):
         """
@@ -144,7 +157,7 @@ class GovtJobPipeline:
         """
         if 'job_id' not in item:
             return item
-        return deferToThread(self._save_govtjob, dict(item))
+        return deferToThread(_serialized, self._save_govtjob, dict(item))
 
     def _save_govtjob(self, item):
         """

@@ -3,24 +3,86 @@ Tests for the scrape pipeline's run bookkeeping and listing expiry.
 
 Covers the pieces that decide what users see and what admins monitor, without
 hitting any real portal:
+  - scrapers.spiders.generic_tender_spider (NIC markup, from saved real pages in test_fixtures/)
   - scrapers.pipelines._parse_dt / _is_open (IST dates, deadline visibility)
   - scrapers.pipelines.ScraperLogPipeline (final run status + last_scraped_at)
   - apps.tenders.scraping.run_source (crash/timeout handling, subprocess mocked)
   - apps.tenders.tasks.expire_stale_listings (which listings get hidden)
 """
+import asyncio
 import subprocess
 from datetime import datetime, timedelta, timezone as dt_timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
+from scrapy.http import HtmlResponse
 
 from apps.govtjobs.models import GovtJob
 from apps.tenders.models import ScraperLog, ScraperSource, Tender
 from apps.tenders.scraping import run_source
 from apps.tenders.tasks import expire_stale_listings
 from scrapers.pipelines import ScraperLogPipeline, _is_open, _parse_dt
+from scrapers.spiders.generic_tender_spider import GenericTenderSpider
+
+# Real pages saved from etenders.hry.nic.in (24 Nov 2026): the NIC home page,
+# one tender's detail page, and the page a detail link returns without the session.
+FIXTURES = Path(__file__).parent / 'test_fixtures'
+
+
+def fixture_response(name, url):
+    """Wrap a saved HTML fixture in a Scrapy HtmlResponse as if downloaded from `url`."""
+    return HtmlResponse(url=url, body=(FIXTURES / name).read_bytes(), encoding='utf-8')
+
+
+class GenericTenderSpiderTests(TestCase):
+    """Parsing of real NIC eProcurement markup (no network)."""
+
+    HOME = 'https://etenders.hry.nic.in/nicgep/app'
+
+    def setUp(self):
+        """Spider configured the way run_source() launches it for a bare-domain source."""
+        self.spider = GenericTenderSpider(start_url='https://etenders.hry.nic.in', source_portal='etenders.hry.nic.in')
+
+    def test_bare_domain_starts_at_nic_app(self):
+        """A bare portal URL is sent straight to /nicgep/app; eprocure.gov.in to /eprocure/app."""
+        async def first_url(spider):
+            async for request in spider.start():
+                return request.url
+        self.assertEqual(asyncio.run(first_url(self.spider)), self.HOME)
+        central = GenericTenderSpider(start_url='https://eprocure.gov.in')
+        self.assertEqual(asyncio.run(first_url(central)), 'https://eprocure.gov.in/eprocure/app')
+
+    def test_listing_follows_only_latest_tender_rows(self):
+        """Only the 10 Latest Tenders rows are followed — not corrigenda or layout tables."""
+        requests = list(self.spider.parse(fixture_response('nic_home.html', self.HOME)))
+        self.assertEqual(len(requests), 10)
+        first = requests[0].cb_kwargs['listing']
+        self.assertTrue(first['title'].startswith('Repair of various damaged streets'))  # serial "1." stripped
+        self.assertEqual(first['submission_deadline'], '01-Dec-2026 05:00 PM')
+
+    def test_detail_page_yields_complete_item(self):
+        """The detail page's caption/field pairs map onto the Tender item fields."""
+        listing = {'title': 'x', 'reference_number': 'ref', 'submission_deadline': '', 'opening_date': '', 'portal_home': self.HOME}
+        items = list(self.spider.parse_detail(fixture_response('nic_tender_detail.html', self.HOME + '?detail'), listing))
+        self.assertEqual(len(items), 1)
+        item = items[0]
+        self.assertEqual(item['tender_id'], '2026_HRY_562238_1')
+        self.assertEqual(item['organisation'], 'Haryana Government / Urban Local Bodies / MC Karnal')
+        self.assertEqual(item['estimated_value'], 1228141.0)
+        self.assertEqual(item['emd_amount'], 24560.0)
+        self.assertEqual(item['submission_deadline'], '01-Dec-2026 05:00 PM')
+        self.assertEqual(item['category'], 'civil')
+        self.assertEqual(item['source_url'], self.HOME)  # session-bound detail URL never exposed to users
+
+    def test_session_timeout_page_is_skipped(self):
+        """A 'session timed out' page yields nothing (and logs an error) instead of a half-empty item."""
+        listing = {'title': 'x', 'reference_number': 'ref', 'submission_deadline': '', 'opening_date': '', 'portal_home': self.HOME}
+        with self.assertLogs('scrapers.spiders.generic_tender_spider', level='ERROR'):
+            items = list(self.spider.parse_detail(fixture_response('nic_session_timeout.html', self.HOME), listing))
+        self.assertEqual(items, [])
 
 
 class ParseDateTests(TestCase):

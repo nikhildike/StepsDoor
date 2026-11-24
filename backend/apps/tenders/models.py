@@ -184,7 +184,7 @@ class ScraperSource(models.Model):
         max_length=100, blank=True,
         # Auto-set in save() to 'generic_tender' or 'generic_govtjob' based on source_type
         # when left blank — the generic spiders handle most NIC-eProcurement-style portals.
-        # Admins only set this explicitly when a portal needs a custom spider (e.g. 'mahatenders').
+        # Admins only set this explicitly when a portal needs a custom spider (one in scrapers/spiders/).
         help_text="Scrapy spider name. Auto-set from source_type if left blank.",
     )
     state = models.CharField(max_length=100, blank=True,
@@ -210,7 +210,13 @@ class ScraperSource(models.Model):
         view) and from `ScraperSourceResource` CSV/Excel imports.
         """
         from urllib.parse import urlparse
-        domain = urlparse(self.url).netloc.lower().removeprefix('www.')
+        # Spreadsheet imports bypass URLField validation, and research sheets often
+        # carry notes after the URL ("https://x.gov.in (tenders)"). Derive the
+        # domain from the first token only so a note can never leak into
+        # source_portal (Tender/GovtJob's dedup key). `clean_scraper_sources`
+        # moves such notes out of `url` into `notes`.
+        first_token = self.url.split()[0] if self.url.strip() else ''
+        domain = urlparse(first_token).netloc.lower().removeprefix('www.')
         if not self.source_portal:
             self.source_portal = domain  # e.g. "https://mahatenders.gov.in/..." -> "mahatenders.gov.in"
         if not self.name:

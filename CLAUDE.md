@@ -204,11 +204,15 @@ Celery Beat (daily)
 - Tunables in `base.py`: `SCRAPER_RUN_TIMEOUT` (default 1800s per crawl), `LISTING_STALE_DAYS` (default 14).
 - Test one portal through the real path from the Django shell: `run_source(ScraperSource.objects.get(...))` (works on inactive sources). Tests: `python manage.py test apps.tenders`.
 
-Most Indian govt portals run the same NIC eProcurement software, so `generic_tender_spider.py` and `generic_govtjob_spider.py` (`scrapers/spiders/`) handle them via shared CSS selectors — adding a portal is usually just a new `ScraperSource` row via Django admin, no code. `mahatenders_spider.py` is an example of a portal-specific spider for one that needs custom handling.
+**Tenders — `generic_tender_spider.py` handles NIC eProcurement portals only** (~27 state/central/PSU portals: `<domain>/nicgep/app`, or `/eprocure/app` on eprocure.gov.in). Without login NIC exposes just the 10-row "Latest Tenders" box (`table#activeTenders`); the full list is behind a captcha. Each row's detail page has the real data (`td.td_caption`/`td.td_field` pairs) but only within the same server session, so this spider turns cookies ON (the project default is off). Tenders are keyed by NIC Tender ID (`2026_HRY_562238_1`); `source_url` is the portal home because detail URLs expire with the session. Non-NIC sites log "No NIC 'Latest Tenders' table" and save nothing (FAILED) — there is no generic table fallback, by design (it produced only junk). Parsing tests use real saved pages in `apps/tenders/test_fixtures/`.
+
+**Govt jobs — `generic_govtjob_spider.py` is not used**: on real sites it mostly saved results, admit cards and menu links. Each recruiter gets a dedicated spider instead; generic govt-job sources stay switched off.
+
+`python manage.py clean_scraper_sources [--dry-run] [--no-probe]` tidies the registry: moves notes typed after URLs in spreadsheet imports into `notes`, probes tender sources for NIC and switches off non-NIC ones, and flags generic govt-job sources. It never deletes rows or switches anything on.
 
 To add a new portal:
-1. If it runs standard NIC software, add a `ScraperSource` row via Django admin (`/admin/tenders/scrapersource/`) — set `url` and `source_type`, leave the rest blank.
-2. If it needs custom parsing, create `backend/scrapers/spiders/<name>_spider.py` and set `spider_name` on the `ScraperSource` row to match.
+1. If it's an NIC eProcurement portal, add a `ScraperSource` row via Django admin (`/admin/tenders/scrapersource/`) — set `url` and `source_type`, leave the rest blank. Add its domain → state to `scrapers/state_map.py`.
+2. Otherwise create `backend/scrapers/spiders/<name>_spider.py` and set `spider_name` on the `ScraperSource` row to match.
 3. Schedule `scrape_all_portals` / `scrape_all_govtjob_portals` / `match_tender_alerts` / `match_govtjob_alerts` / `expire_stale_listings` via Django admin → Periodic Tasks (django-celery-beat) if not already running.
 
 ---

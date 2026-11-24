@@ -291,6 +291,21 @@ PORTAL_STATE_MAP = {
     'pngrb.gov.in':              'Central Govt',
     'cerc.gov.in':               'Central Govt',
     'eia.nic.in':                'Central Govt',
+
+    # ── NIC eProcurement tender portals (scraped by generic_tender) ───────────
+    # Listed together so adding a new NIC portal source is one line here.
+    'etenders.hry.nic.in':          'Haryana',
+    'eproc.punjab.gov.in':          'Punjab',
+    'eproc.rajasthan.gov.in':       'Rajasthan',
+    'etender.up.nic.in':            'Uttar Pradesh',
+    'mptenders.gov.in':             'Madhya Pradesh',
+    'govtprocurement.delhi.gov.in': 'Delhi',
+    'pudutenders.gov.in':           'Puducherry',
+    'etenders.chd.nic.in':          'Chandigarh',
+    'ddtenders.gov.in':             'Dadra & Nagar Haveli and Daman & Diu',
+    'coalindiatenders.nic.in':      'Central Govt',
+    'defproc.gov.in':               'Central Govt',
+    'iocletenders.nic.in':          'Central Govt',
 }
 
 
