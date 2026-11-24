@@ -31,7 +31,7 @@ mobile/     ← Expo React Native app (job seekers only)
 
 ## Backend (Django)
 
-**Run from `backend/` directory.** A virtualenv exists at `backend/linksvenv/` — activate it before running Django commands (`source linksvenv/Scripts/activate` on Windows bash). Django 6.0.
+**Run from `backend/` directory.** A virtualenv exists at `backend/linksvenv/` (gitignored) — activate it before running Django commands (`source linksvenv/Scripts/activate` on Windows bash). Django 6.0. A virtualenv is tied to the machine it was created on; if activation leaves `which python` pointing outside `linksvenv/`, recreate it: `python -m venv linksvenv && linksvenv/Scripts/python -m pip install -r requirements.txt`. `requirements.txt` must list every third-party import — the venv doesn't see globally installed packages.
 
 ```bash
 python manage.py runserver
