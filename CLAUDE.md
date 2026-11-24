@@ -38,9 +38,12 @@ python manage.py makemigrations <app>
 python manage.py migrate
 python manage.py test
 python manage.py test apps.jobs          # single app
-celery -A config worker -l info          # Celery worker
-celery -A config beat -l info            # Celery Beat scheduler
+celery -A config worker -l info          # Celery worker (on Windows add `-P solo` — prefork isn't supported there)
+celery -A config beat -l info            # Celery Beat scheduler (DatabaseScheduler — reads the schedule from the DB)
+python manage.py setup_scraper_schedule  # create the Beat schedule once per environment (--list to view, --reset to restore defaults)
 ```
+
+The Celery app is `config/celery.py` (imported by `config/__init__.py` so `@shared_task`s bind to it); all settings are `CELERY_*` in `base.py`. Both worker and beat need Redis (`CELERY_BROKER_URL`).
 
 Run scrapers manually:
 ```bash
@@ -185,17 +188,19 @@ Config lives in `package.json`'s `jest` key; `jest.setup.js` swaps in the offici
 Portals are registered in the DB via the `ScraperSource` model (`apps/tenders/models.py`), not hardcoded — admin only supplies a URL and `source_type` (`tender` / `govt_job`); `source_portal`, `name`, and `spider_name` are auto-derived on save (`spider_name` defaults to `generic_tender` or `generic_govtjob`).
 
 ```
-Celery Beat (every 6 hours)
-  → scrape_all_portals / scrape_all_govtjob_portals tasks
-      → one scrape_portal / scrape_govtjob_portal .delay(portal_name) per active source
+Celery Beat (schedule from `setup_scraper_schedule`, all times IST)
+  hourly at :05        → scrape_all_portals            (tenders; NIC shows only the 10 newest)
+  00:20/06:20/12:20/18:20 → scrape_all_govtjob_portals (govt jobs)
+      → one scrape_portal / scrape_govtjob_portal per active source, queued with `expires`
+        just under the interval so a worker outage doesn't pile up duplicate runs
   → scrape_portal(portal_name) task
       → apps.tenders.scraping.run_source(): creates ScraperLog, runs `scrapy crawl` as a CHILD PROCESS
       → TenderPipeline / GovtJobPipeline → update_or_create() on Tender/GovtJob
       → ScraperLogPipeline → final status + counts on ScraperLog, stamps ScraperSource.last_scraped_at
-  → match_tender_alerts / match_govtjob_alerts tasks
-      → new listings (last 24h) matched against alerts; notification dispatch still TODO
-Celery Beat (daily)
-  → expire_stale_listings → hides listings past deadline or unseen for LISTING_STALE_DAYS
+  00:15 daily          → expire_stale_listings  (hides listings past deadline or unseen for LISTING_STALE_DAYS)
+  07:30 / 07:40 daily  → match_tender_alerts / match_govtjob_alerts
+      → listings created in the last 24h matched against alerts (daily, so nothing matches twice);
+        notification dispatch still TODO
 ```
 
 - **Never run `CrawlerProcess` inside a Celery task.** Twisted's reactor can't restart in a long-lived worker (`ReactorNotRestartable` from the second task on), which is why `run_source()` uses a subprocess. `run_scrapers` runs in-process only because the CLI exits afterwards.
@@ -221,7 +226,7 @@ Deadlines go through `_parse_deadline`: a date without a time means 23:59:59 IST
 To add a new portal:
 1. If it's an NIC eProcurement portal, add a `ScraperSource` row via Django admin (`/admin/tenders/scrapersource/`) — set `url` and `source_type`, leave the rest blank. Add its domain → state to `scrapers/state_map.py`.
 2. Otherwise create `backend/scrapers/spiders/<name>_spider.py` and set `spider_name` on the `ScraperSource` row to match.
-3. Schedule `scrape_all_portals` / `scrape_all_govtjob_portals` / `match_tender_alerts` / `match_govtjob_alerts` / `expire_stale_listings` via Django admin → Periodic Tasks (django-celery-beat) if not already running.
+3. Nothing to schedule per portal — the fan-out tasks pick up every active source. In a new environment run `python manage.py setup_scraper_schedule` once.
 
 ---
 

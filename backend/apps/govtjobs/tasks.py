@@ -41,25 +41,23 @@ def scrape_govtjob_portal(portal_name: str):
 
 
 @shared_task
-def scrape_all_govtjob_portals():
-    """Dispatch scrape tasks for every active govt job source in ScraperSource.
+def scrape_all_govtjob_portals(expires_seconds: int = 5 * 3600):
+    """Dispatch one `scrape_govtjob_portal` task per active govt job source.
 
-    Invoked periodically by Celery Beat (analogous to the tenders pipeline's
-    `scrape_all_portals` — see the repo's CLAUDE.md Data Pipeline section) to
-    fan out one `scrape_govtjob_portal` task per active portal so each portal
-    scrapes independently and failures don't block one another.
+    Celery Beat calls this every 6 hours (`setup_scraper_schedule`), mirroring the
+    tenders pipeline's `scrape_all_portals`. `expires_seconds` (default 5 h, under the
+    interval) drops queued runs that didn't start before the next round, so a worker
+    outage doesn't leave duplicate runs piled up. Returns the number of tasks queued.
     """
     from apps.tenders.models import ScraperSource
 
-    portals = ScraperSource.objects.filter(
+    portals = list(ScraperSource.objects.filter(
         source_type=ScraperSource.TYPE_GOVT_JOB, is_active=True
-    ).values_list('source_portal', flat=True)
-
-    count = 0
+    ).values_list('source_portal', flat=True))
     for portal_name in portals:
-        scrape_govtjob_portal.delay(portal_name)
-        count += 1
-    logger.info(f"Dispatched {count} govt job scrape task(s).")
+        scrape_govtjob_portal.apply_async(args=[portal_name], expires=expires_seconds)
+    logger.info(f"Dispatched {len(portals)} govt job scrape task(s).")
+    return len(portals)
 
 
 @shared_task

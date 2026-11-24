@@ -293,3 +293,38 @@ class ExpireStaleListingsTests(TestCase):
         live.refresh_from_db()
         self.assertEqual(dead.status, ScraperLog.Status.FAILED)
         self.assertEqual(live.status, ScraperLog.Status.RUNNING)
+
+
+class ScheduleTests(TestCase):
+    """setup_scraper_schedule and the Beat fan-out tasks it schedules."""
+
+    def test_schedule_command_is_idempotent_and_reset_restores(self):
+        """First run creates all entries; a re-run keeps admin edits; --reset restores defaults."""
+        from io import StringIO
+        from django.core.management import call_command
+        from django_celery_beat.models import PeriodicTask
+        from apps.tenders.management.commands.setup_scraper_schedule import SCHEDULE
+
+        call_command('setup_scraper_schedule', stdout=StringIO())
+        self.assertEqual(set(PeriodicTask.objects.values_list('name', flat=True)), set(SCHEDULE))
+        hourly = PeriodicTask.objects.get(name='Scrape tender portals (hourly)')
+        self.assertEqual((hourly.crontab.minute, hourly.crontab.hour, str(hourly.crontab.timezone)), ('5', '*', 'Asia/Kolkata'))
+
+        PeriodicTask.objects.filter(pk=hourly.pk).update(enabled=False)  # an admin pauses it
+        call_command('setup_scraper_schedule', stdout=StringIO())
+        self.assertFalse(PeriodicTask.objects.get(pk=hourly.pk).enabled)
+        self.assertEqual(PeriodicTask.objects.count(), len(SCHEDULE))  # no duplicates
+
+        call_command('setup_scraper_schedule', '--reset', stdout=StringIO())
+        self.assertTrue(PeriodicTask.objects.get(pk=hourly.pk).enabled)
+
+    def test_fan_out_queues_active_sources_with_expiry(self):
+        """scrape_all_portals queues one task per ACTIVE tender source, each expiring before the next round."""
+        from apps.tenders.tasks import scrape_all_portals, scrape_portal
+        ScraperSource.objects.create(url='https://a.example.gov.in')
+        ScraperSource.objects.create(url='https://off.example.gov.in', is_active=False)
+        ScraperSource.objects.create(url='https://jobs.example.gov.in', source_type=ScraperSource.TYPE_GOVT_JOB)
+
+        with mock.patch.object(scrape_portal, 'apply_async') as apply_async:
+            self.assertEqual(scrape_all_portals(expires_seconds=3000), 1)
+        apply_async.assert_called_once_with(args=['a.example.gov.in'], expires=3000)

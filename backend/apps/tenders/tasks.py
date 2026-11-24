@@ -1,14 +1,11 @@
 """
 Celery tasks for the tenders module.
 
-Scheduling is managed via django-celery-beat (DatabaseScheduler).
-After `python manage.py migrate`, add periodic tasks in the Django admin
-at /admin/django_celery_beat/periodictask/.
-
-Recommended schedule:
-  - scrape_all_portals    → every 6 hours
-  - match_tender_alerts   → every 6 hours (after scraping)
-  - expire_stale_listings → once a day (covers govt jobs too)
+Scheduling is managed via django-celery-beat (DatabaseScheduler). The schedule is
+created by `python manage.py setup_scraper_schedule` (see that command for times):
+  - scrape_all_portals    → hourly (NIC portals only expose their 10 newest tenders)
+  - match_tender_alerts   → daily (its window is the last 24 hours)
+  - expire_stale_listings → daily (covers govt jobs too)
 
 Each portal's crawl runs in its own child process (see apps.tenders.scraping).
 """
@@ -46,27 +43,29 @@ def scrape_portal(portal_name: str):
 
 
 @shared_task
-def scrape_all_portals():
+def scrape_all_portals(expires_seconds: int = 3000):
     """
-    Dispatch scrape tasks for every active tender source in the ScraperSource registry.
+    Dispatch one `scrape_portal` task per active tender source.
 
-    This is the entry point Celery Beat calls on its recommended every-6-hours schedule
-    (configured via django-celery-beat's PeriodicTask admin, not in code). It only fans out
-    one `scrape_portal.delay()` call per portal — the actual scraping happens asynchronously
-    in those child tasks so a slow/broken portal can't block the others.
+    Celery Beat calls this hourly (`setup_scraper_schedule`). It only fans out — the
+    crawls run in separate worker tasks so a slow or broken portal can't block the others.
+
+    `expires_seconds` (default 50 min, just under the hourly interval) is set on each
+    queued task: if workers are down or backlogged, a portal's run that didn't start
+    before the next round is dropped instead of piling up and running twice.
+    Returns the number of tasks queued.
     """
     from apps.tenders.models import ScraperSource
 
     # Only TYPE_TENDER sources here — govt job portals have their own equivalent task
     # (apps.govtjobs.tasks.scrape_all_govtjob_portals) filtering TYPE_GOVT_JOB.
-    sources = ScraperSource.objects.filter(
+    sources = list(ScraperSource.objects.filter(
         source_type=ScraperSource.TYPE_TENDER, is_active=True
-    ).values_list('source_portal', flat=True)
-    count = 0
+    ).values_list('source_portal', flat=True))
     for portal_name in sources:
-        scrape_portal.delay(portal_name)
-        count += 1
-    logger.info(f"Dispatched {count} tender scrape task(s).")
+        scrape_portal.apply_async(args=[portal_name], expires=expires_seconds)
+    logger.info(f"Dispatched {len(sources)} tender scrape task(s).")
+    return len(sources)
 
 
 @shared_task
