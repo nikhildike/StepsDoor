@@ -368,3 +368,25 @@ class MembersOnlyApiTests(TestCase):
                 self.assertEqual(client.get(url).status_code, 200)
         self.assertEqual(client.get(f'/api/tenders/{self.tender.pk}/').data['tender_id'], '2026_HRY_1_1')
         self.assertEqual(client.get(f'/api/govtjobs/{self.job.pk}/').data['job_id'], 'advt:2026-13')
+
+
+class PurgeLegacyListingsTests(TestCase):
+    """purge_legacy_listings deletes only rows the retired generic spiders saved."""
+
+    def test_keeps_current_spider_rows_and_deletes_the_rest(self):
+        """NIC-keyed tenders and prefixed job ids survive; everything else goes; --dry-run deletes nothing."""
+        from io import StringIO
+        from django.core.management import call_command
+        now = timezone.now()
+        common = dict(organisation='Dept', published_at=now, source_url='https://x.example/')
+        Tender.objects.create(source_portal='etenders.hry.nic.in', tender_id='2026_HRY_562238_1', title='keep', state='Haryana', **common)
+        Tender.objects.create(source_portal='etenders.hry.nic.in', tender_id='2026C0BA8AB0 A1B4', title='legacy', state='Haryana', **common)
+        GovtJob.objects.create(source_portal='rrbapply.gov.in', job_id='cen:08/2026', title='keep', **common)
+        GovtJob.objects.create(source_portal='esic.gov.in', job_id='https-www-esic-gov-in-recruitments', title='legacy', **common)
+
+        call_command('purge_legacy_listings', '--dry-run', stdout=StringIO())
+        self.assertEqual((Tender.objects.count(), GovtJob.objects.count()), (2, 2))
+
+        call_command('purge_legacy_listings', stdout=StringIO())
+        self.assertEqual(list(Tender.objects.values_list('title', flat=True)), ['keep'])
+        self.assertEqual(list(GovtJob.objects.values_list('title', flat=True)), ['keep'])

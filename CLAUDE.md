@@ -225,6 +225,8 @@ Deadlines go through `_parse_deadline`: a date without a time means 23:59:59 IST
 
 `python manage.py clean_scraper_sources [--dry-run] [--no-probe]` tidies the registry: moves notes typed after URLs in spreadsheet imports into `notes`, probes tender sources for NIC and switches off non-NIC ones, and flags generic govt-job sources. It never deletes rows or switches anything on.
 
+`python manage.py purge_legacy_listings [--dry-run]` deletes listings saved by the retired generic spiders — any Tender whose `tender_id` isn't an NIC Tender ID and any GovtJob whose `job_id` lacks a dedicated-spider prefix (`exam:`, `advt:`, `rec:`, `crp:`, `cen:`). Run once per environment after deploying the new spiders. **New govt-job spiders must use a prefixed `job_id`** (and add the prefix to `CURRENT_JOB_ID_PREFIXES`) or this command would treat their rows as legacy.
+
 To add a new portal:
 1. If it's an NIC eProcurement portal, add a `ScraperSource` row via Django admin (`/admin/tenders/scrapersource/`) — set `url` and `source_type`, leave the rest blank. Add its domain → state to `scrapers/state_map.py`.
 2. Otherwise create `backend/scrapers/spiders/<name>_spider.py` and set `spider_name` on the `ScraperSource` row to match.
