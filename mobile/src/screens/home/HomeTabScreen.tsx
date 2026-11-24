@@ -27,6 +27,7 @@ import { storeService } from '@/services/storeService';
 import { tenderService } from '@/services/tenderService';
 import { useJobs } from '@/hooks/useJobs';
 import { useAuth } from '@/hooks/useAuth';
+import { MembersOnly } from '@/components/common/MembersOnly';
 import { JobCard } from '@/components/jobs/JobCard';
 import { TenderCard } from '@/components/tenders/TenderCard';
 import { ALL_STORES, ALL_RETAIL_STORES, StoreEntry } from '@/screens/shopping/ShoppingScreen';
@@ -224,24 +225,25 @@ export function HomeTabScreen() {
 
   // Contractor accounts see a tender-focused dashboard (new tenders feed)
   // instead of the default jobs/stores/offers feed.
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const isContractor = !!user?.is_contractor;
 
   // Tender search results — fetched from the API whenever the shared
   // search text changes and is non-empty (mirrors TendersScreen's own
   // `?search=` fetch), independent of jobStore since tenders have no
-  // shared store of their own.
+  // shared store of their own. Members only: guests get an inline sign-in
+  // prompt in the results instead of a request (the API 401s them).
   const [tenderResults, setTenderResults] = useState<TenderResult[]>([]);
   const [tendersSearchLoading, setTendersSearchLoading] = useState(false);
   useEffect(() => {
-    if (!isSearching) { setTenderResults([]); return; }
+    if (!isSearching || !isAuthenticated) { setTenderResults([]); return; }
     setTendersSearchLoading(true);
     tenderService
       .list({ search: filters.search })
       .then(({ data }) => setTenderResults(data.results ?? data))
       .catch(() => setTenderResults([]))
       .finally(() => setTendersSearchLoading(false));
-  }, [isSearching, filters.search]);
+  }, [isSearching, isAuthenticated, filters.search]);
 
   // Shopping matches — the static directory (`ALL_STORES`, from
   // ShoppingScreen, both the "Online Stores" and "Retail Chains" segments)
@@ -357,7 +359,9 @@ export function HomeTabScreen() {
       </View>
 
       {isSearching ? (
-        searchLoading ? <Spinner /> : !hasSearchResults ? (
+        // Guests always get the results list, which carries the tenders sign-in prompt —
+        // otherwise a tenders-only match would just read "No results".
+        searchLoading ? <Spinner /> : !hasSearchResults && isAuthenticated ? (
           <EmptyState title="No results" description="Try a different search term." />
         ) : (
           <ScrollView contentContainerStyle={styles.list}>
@@ -367,6 +371,12 @@ export function HomeTabScreen() {
                 {jobResults.map((job: any) => (
                   <JobCard key={job.id} job={job} onPress={() => openJob(job.id)} />
                 ))}
+              </View>
+            )}
+            {!isAuthenticated && (
+              <View style={styles.section}>
+                <Text style={styles.sectionHeading}>Tenders</Text>
+                <MembersOnly compact what="matching government tenders" />
               </View>
             )}
             {tenderResults.length > 0 && (

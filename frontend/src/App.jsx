@@ -9,7 +9,7 @@
  * Rendered by main.jsx inside `BrowserRouter` + `ThemeProvider`.
  */
 import { useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 
 // Public pages
@@ -66,22 +66,25 @@ import JobsLayout from '@/components/layout/JobsLayout'
  * auth session from localStorage — this prevents a premature redirect to
  * `/login` during the brief microtask window before the persisted token is
  * available (a Zustand v5 behaviour). Once hydrated, redirects to `/login`
- * if there is no auth token. When `requireCompany` is set, only company (or
+ * if there is no auth token, passing the requested path as `state.from` so
+ * useAuth sends the user back to it after signing in. When `requireCompany` is set, only company (or
  * store-owner, since store owners are also flagged `is_company`) accounts
  * pass; otherwise redirects to `/`. When `requireStore` is set, only
  * store-owner accounts pass; otherwise redirects to `/`.
  *
  * @param {{ children: import('react').ReactNode, requireCompany?: boolean, requireStore?: boolean }} props
  * @returns {JSX.Element|null} Either the guarded `children`, a `<Navigate>` redirect, or null while hydrating.
- * Used by: the `/dashboard`, `/seeker`, and `/store` route subtrees below.
+ * Used by: the `/dashboard`, `/seeker`, and `/store` route subtrees and the
+ * members-only `/tenders/:id` and `/govt-jobs/:id` detail pages below.
  */
 function ProtectedRoute({ children, requireCompany = false, requireStore = false }) {
   const { user, token, _hasHydrated } = useAuthStore()
+  const location = useLocation() // called before any early return (rules of hooks)
   // Hold off until Zustand has loaded the persisted session from localStorage.
   // Without this guard, the initial render sees token=null and sends the user
   // to /login even when a valid session exists in storage.
   if (!_hasHydrated) return null
-  if (!token) return <Navigate to="/login" replace />
+  if (!token) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   // store owners have is_company=true so requireCompany passes; keep explicit check for clarity
   if (requireCompany && !user?.is_company && !user?.is_store_owner) return <Navigate to="/" replace />
   if (requireStore && !user?.is_store_owner) return <Navigate to="/" replace />
@@ -123,19 +126,19 @@ export default function App() {
           <Route path="/jobs" element={<Jobs />} />
           {/* Company directory listing — no guard */}
           <Route path="/companies" element={<Companies />} />
-          {/* Government job listings browse/search page — no guard */}
+          {/* Govt recruitment portal directory (static links, not scraped data) — no guard */}
           <Route path="/govt-jobs" element={<GovtJobs />} />
           {/* Freelancer listings/profiles page — no guard */}
           <Route path="/freelancers" element={<Freelancers />} />
         </Route>
         {/* Single private job listing detail page — no guard */}
         <Route path="/jobs/:id" element={<JobDetail />} />
-        {/* Government tender listings browse/search page — no guard */}
+        {/* Tender portal directory (static links, not scraped data) — no guard */}
         <Route path="/tenders" element={<Tenders />} />
-        {/* Single government tender detail page — no guard */}
-        <Route path="/tenders/:id" element={<TenderDetail />} />
-        {/* Single government job detail page — no guard */}
-        <Route path="/govt-jobs/:id" element={<GovtJobDetail />} />
+        {/* Scraped tender / govt job detail pages — members only (the API returns 401
+            to anonymous requests); visitors are sent to /login and brought back here. */}
+        <Route path="/tenders/:id" element={<ProtectedRoute><TenderDetail /></ProtectedRoute>} />
+        <Route path="/govt-jobs/:id" element={<ProtectedRoute><GovtJobDetail /></ProtectedRoute>} />
         {/* Services marketing/listing page — no guard */}
         <Route path="/services" element={<Services />} />
         {/* Shopping marketing/listing page — no guard */}

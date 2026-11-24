@@ -1,9 +1,9 @@
 """
 DRF views for the `tenders` app's API.
 
-Provides the public, unauthenticated tender-browsing endpoints (job seekers browse tenders
-for free, per the product's revenue model — only company job listings are paid) and the
-authenticated tender-alert management endpoints. Wired up via `urls.py`'s router.
+Provides the members-only tender-browsing endpoints (free, but scraped data is shown to
+logged-in users only — anonymous requests get 401) and the authenticated tender-alert
+management endpoints. Wired up via `urls.py`'s router.
 """
 from django.conf import settings
 from django.db.models import Count
@@ -19,15 +19,16 @@ from .serializers import TenderListSerializer, TenderDetailSerializer, TenderAle
 
 class TenderViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Public read-only endpoint for government tenders.
+    Members-only read-only endpoint for government tenders (401 without a JWT).
 
     Supports filtering by state, category, source_portal and full-text search via ?search=
     (PostgreSQL FTS when available, otherwise DRF's basic icontains SearchFilter on SQLite).
-    Backs the tenders listing/detail pages in the web and mobile frontends; no auth required
-    since tender browsing is free for all job seekers.
+    Backs the tender previews/detail pages in the web and mobile frontends, which only call
+    it when signed in and otherwise show a sign-in prompt.
     """
-    authentication_classes = []  # explicitly disable auth parsing — this endpoint is fully public
-    permission_classes = [permissions.AllowAny]
+    # Members only: scraped data is shown to logged-in users (JWT, the project default
+    # authentication). Applies to list, retrieve and the /states/ facet alike.
+    permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['state', 'category', 'source_portal', 'is_active']
     search_fields = ['title', 'organisation']  # used by SearchFilter's icontains fallback (non-Postgres path)

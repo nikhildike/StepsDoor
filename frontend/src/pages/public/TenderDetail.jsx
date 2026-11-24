@@ -1,10 +1,11 @@
 /**
  * TenderDetail.jsx
  *
- * Public detail page for a single scraped government tender. Mounted at
+ * Detail page for a single scraped government tender. Mounted at
  * `/tenders/:id` (see App.jsx). Fetches the tender by id via
  * `tenderService.get` and renders its metadata plus links to the source
- * portal / tender document. No auth required — tenders are free to browse.
+ * portal / tender document. Members only: wrapped in ProtectedRoute (App.jsx)
+ * because the API serves scraped tenders to logged-in users only.
  */
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'

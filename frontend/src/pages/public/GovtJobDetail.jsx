@@ -1,10 +1,11 @@
 /**
  * GovtJobDetail.jsx
  *
- * Public detail page for a single scraped government job notification.
+ * Detail page for a single scraped government job notification.
  * Mounted at `/govt-jobs/:id` (see App.jsx). Fetches the job by id via
  * `govtJobService.get` and renders vacancy/eligibility/date metadata plus
- * links to the official portal and notification PDF. No auth required.
+ * links to the official portal and notification PDF. Members only: wrapped
+ * in ProtectedRoute (App.jsx) because the API requires login.
  */
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'

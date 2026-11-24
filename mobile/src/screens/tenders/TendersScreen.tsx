@@ -6,7 +6,8 @@
  * from `GET /tenders/states/`, since `Tender.state` is free-text scraped
  * data) and "All Categories" (hardcoded, mirroring the backend's fixed
  * `TenderCategory` enum) picker buttons. Root screen of that tab's stack
- * navigator; navigates to `TenderDetailScreen` on card tap.
+ * navigator; navigates to `TenderDetailScreen` on card tap. Members only:
+ * guests see a `MembersOnly` sign-in prompt and no API calls are made.
  */
 import React, { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View, TextInput } from 'react-native';
@@ -16,6 +17,8 @@ import { FilterPickerButton, FilterOption } from '@/components/common/FilterPick
 import { Spinner } from '@/components/common/Spinner';
 import { EmptyState } from '@/components/common/EmptyState';
 import { ScreenWrapper } from '@/components/common/ScreenWrapper';
+import { MembersOnly } from '@/components/common/MembersOnly';
+import { useAuth } from '@/hooks/useAuth';
 import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
@@ -61,31 +64,44 @@ export function TendersScreen({ navigation }: { navigation: any }) {
   const [states, setStates] = useState<FilterOption[]>([]); // distinct states with counts, for the picker
   const Colors = useThemeColors();
   const styles = makeStyles(Colors);
+  // Scraped tenders are members-only (the API 401s guests); fetches below wait for a
+  // token and re-run when the user signs in from the prompt.
+  const { isAuthenticated } = useAuth();
 
-  // Fetches the distinct-states list once on mount to populate the "All
+  // Fetches the distinct-states list once signed in to populate the "All
   // States" picker (see `tenderService.states()` — curated against a known
   // portal->state map so scraped junk values don't show up as options).
   useEffect(() => {
+    if (!isAuthenticated) return;
     tenderService
       .states()
       .then(({ data }) => setStates(data.map((row: { state: string; count: number }) => ({
         value: row.state, label: row.state, count: row.count,
       }))))
       .catch(() => setStates([]));
-  }, []);
+  }, [isAuthenticated]);
 
   // Fetches tenders from GET /tenders/?search=...&state=...&category=...
   // whenever any filter changes (including the initial empty-filter load).
   // Falls back to an empty list on error so the EmptyState renders instead
   // of crashing.
   useEffect(() => {
+    if (!isAuthenticated) return;
     setLoading(true);
     tenderService
       .list({ search, state: state || undefined, category: category || undefined })
       .then(({ data }) => setTenders(data.results ?? data))
       .catch(() => setTenders([]))
       .finally(() => setLoading(false));
-  }, [search, state, category]);
+  }, [isAuthenticated, search, state, category]);
+
+  if (!isAuthenticated) {
+    return (
+      <ScreenWrapper>
+        <MembersOnly what="the latest government tenders" />
+      </ScreenWrapper>
+    );
+  }
 
   return (
     <ScreenWrapper>

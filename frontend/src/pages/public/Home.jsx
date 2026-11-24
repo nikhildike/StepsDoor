@@ -18,6 +18,7 @@ import { govtJobService } from '@/services/govtJobService'
 import { companyService } from '@/services/companyService'
 import { storeService } from '@/services/storeService'
 import { useAuthStore } from '@/store/authStore'
+import { MembersOnly } from '@/components/ui/MembersOnly'
 import { timeAgo, formatDate } from '@/utils/formatDate'
 import { JOB_TYPES } from '@/utils/constants'
 
@@ -231,8 +232,11 @@ export default function Home() {
   const navigate = useNavigate()
   // Contractor accounts see a tender-focused dashboard rather than the
   // default jobs/companies/freelancers feed.
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
   const isContractor = !!user?.is_contractor
+  // Scraped tenders/govt jobs are members-only: the API 401s anonymous requests
+  // (and api.js would then redirect to /login), so they're only fetched with a token.
+  const isMember = !!token
 
   const [searchQuery, setSearchQuery] = useState('') // controlled input for the hero search bar
   const [jobs, setJobs] = useState([])
@@ -245,12 +249,9 @@ export default function Home() {
 
   // Fires once on mount: kicks off independent preview fetches in parallel.
   // Each request's failure is caught and swallowed individually so one down
-  // service doesn't blank the page. Contractors fetch more tenders (6 vs 4)
-  // since that section is their primary feed.
+  // service doesn't blank the page.
   useEffect(() => {
     jobService.list({ page_size: 6 }).then(({ data }) => setJobs((data.results ?? data).slice(0, 6))).catch(() => {})
-    tenderService.list({ page_size: 6 }).then(({ data }) => setTenders((data.results ?? data).slice(0, 6))).catch(() => {})
-    govtJobService.list({ page_size: 4 }).then(({ data }) => setGovtJobs((data.results ?? data).slice(0, 4))).catch(() => {})
     companyService.list().then(({ data }) => setCompanies(data.results ?? data)).catch(() => {})
     storeService.listRetail().then(({ data }) => {
       const all = data.results ?? data
@@ -261,6 +262,18 @@ export default function Home() {
       .then(({ data }) => setOfferLinks(data.results ?? data))
       .catch(() => {})
   }, [])
+
+  // Members-only previews: fetched when signed in, cleared on sign-out (re-runs when
+  // the token changes). Contractors get 6 tenders since that's their primary feed.
+  useEffect(() => {
+    if (!isMember) {
+      setTenders([])
+      setGovtJobs([])
+      return
+    }
+    tenderService.list({ page_size: 6 }).then(({ data }) => setTenders((data.results ?? data).slice(0, 6))).catch(() => {})
+    govtJobService.list({ page_size: 4 }).then(({ data }) => setGovtJobs((data.results ?? data).slice(0, 4))).catch(() => {})
+  }, [isMember])
 
   // Hero search form submit handler — contractors are sent to the tenders
   // listing, everyone else goes to jobs. The query is encoded as a `search`
@@ -647,8 +660,10 @@ export default function Home() {
                     View all <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
-                {/* Empty state vs. up to 4 latest tender previews */}
-                {tenders.length === 0 ? (
+                {/* Sign-in prompt for visitors; otherwise empty state vs. up to 4 latest tender previews */}
+                {!isMember ? (
+                  <MembersOnly what="the latest government tenders" />
+                ) : tenders.length === 0 ? (
                   <p className="text-muted-foreground text-sm">No tenders yet.</p>
                 ) : (
                   <div className="space-y-3">
@@ -670,8 +685,10 @@ export default function Home() {
                     View all <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
-                {/* Empty state vs. up to 4 latest govt job previews */}
-                {govtJobs.length === 0 ? (
+                {/* Sign-in prompt for visitors; otherwise empty state vs. up to 4 latest govt job previews */}
+                {!isMember ? (
+                  <MembersOnly what="the latest government job openings" />
+                ) : govtJobs.length === 0 ? (
                   <p className="text-muted-foreground text-sm">No government jobs yet.</p>
                 ) : (
                   <div className="space-y-3">

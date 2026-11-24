@@ -1,7 +1,7 @@
 """
 Views for the `govtjobs` app.
 
-Exposes `GovtJobViewSet`, the public read-only browsing/search API for
+Exposes `GovtJobViewSet`, the members-only read-only browsing/search API for
 scraped government job listings, and `GovtJobAlertViewSet`, the authenticated
 CRUD API a job seeker uses to manage their own saved alerts. Routed in
 `urls.py`.
@@ -20,12 +20,13 @@ from .serializers import GovtJobListSerializer, GovtJobDetailSerializer, GovtJob
 
 class GovtJobViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Public read-only endpoint for government jobs.
+    Members-only read-only endpoint for government jobs (401 without a JWT).
     Supports filtering by state, category, source_portal and
     full-text search via ?search= (PostgreSQL FTS when available).
     """
-    authentication_classes = []
-    permission_classes = [permissions.AllowAny]
+    # Members only: scraped data is shown to logged-in users (JWT, the project default
+    # authentication). Applies to list, retrieve and the /states/ facet alike.
+    permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['state', 'category', 'source_portal', 'is_active']
     search_fields = ['title', 'organisation']
@@ -68,7 +69,7 @@ class GovtJobViewSet(viewsets.ReadOnlyModelViewSet):
     def states(self, request):
         """Return states that have at least one active govt job, with counts.
 
-        Used to populate a location filter/facet on the public govt jobs
+        Used to populate a location filter/facet on the (members-only) govt jobs
         browse page.
         """
         # Only include states that look like real state names (not scraped junk) —

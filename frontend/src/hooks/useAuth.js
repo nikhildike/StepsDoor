@@ -8,7 +8,7 @@
  * any header/nav component that needs `isAuthenticated`/`signOut`.
  */
 import { useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import { authService } from '@/services/authService'
 
@@ -29,18 +29,25 @@ import { authService } from '@/services/authService'
 export function useAuth() {
   const { user, token, setAuth, logout, setUser } = useAuthStore()
   const navigate = useNavigate()
+  const location = useLocation()
+  // Page the visitor was sent to /login (or /register) from — set by
+  // ProtectedRoute and the MembersOnly prompt as `state.from`. After signing
+  // in they return there (e.g. a shared tender link) instead of a dashboard.
+  const returnTo = location.state?.from
 
-  // Routes the user to the correct home surface based on account type:
-  // store owners -> /store, company accounts -> /dashboard, contractors
-  // -> /tenders (their primary content), otherwise treat as a job seeker
-  // -> /seeker. Order matters: store owners are also flagged is_company,
-  // so that check must run before the company check.
+  // Routes the user to the page they originally asked for, if any; otherwise
+  // to the correct home surface for their account type: store owners ->
+  // /store, company accounts -> /dashboard, contractors -> /tenders (their
+  // primary content), otherwise treat as a job seeker -> /seeker. Order
+  // matters: store owners are also flagged is_company, so that check must
+  // run before the company check.
   const redirectAfterAuth = useCallback((user) => {
-    if (user.is_store_owner) navigate('/store')
+    if (returnTo) navigate(returnTo, { replace: true })
+    else if (user.is_store_owner) navigate('/store')
     else if (user.is_company) navigate('/dashboard')
     else if (user.is_contractor) navigate('/tenders')
     else navigate('/seeker')
-  }, [navigate])
+  }, [navigate, returnTo])
 
   /**
    * Logs in with email/password credentials, persists the returned user

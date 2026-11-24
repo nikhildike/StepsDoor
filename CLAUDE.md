@@ -6,10 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A job board SaaS for the Indian market with three content types:
 1. **Private job listings** — companies pay a subscription to post; job seekers browse free and are redirected to the company's own careers page to apply
-2. **Government tenders** — scraped from public portals (mahatenders.gov.in, eprocure.gov.in, etc.), free to browse
-3. **Government jobs** — scraped/fetched from NCS API and recruitment portals, free to browse
+2. **Government tenders** — scraped from public portals (mahatenders.gov.in, eprocure.gov.in, etc.), free but **members only** (login required)
+3. **Government jobs** — scraped/fetched from NCS API and recruitment portals, free but **members only** (login required)
 
 Revenue comes from company subscriptions via Razorpay.
+
+**Members-only scraped data**: `TenderViewSet` / `GovtJobViewSet` (incl. `/states/`) require a JWT and 401 anonymous requests. Clients must not call them for guests — the web `api.js` interceptor treats any 401 as an expired session and redirects to `/login`. Instead, show the `MembersOnly` prompt (`frontend/src/components/ui/MembersOnly.jsx`, `mobile/src/components/common/MembersOnly.tsx`) and fetch only when a token exists. Web: `/tenders/:id` and `/govt-jobs/:id` are wrapped in `ProtectedRoute`, which passes `state.from` so `useAuth` returns the user there after login; `/tenders` and `/govt-jobs` themselves are static portal-link directories and stay public. Mobile: Login/Register `goBack()` on success, so screens just re-render with a token and load.
 
 ---
 

@@ -12,6 +12,8 @@ import { Button } from '@/components/common/Button';
 import { Spinner } from '@/components/common/Spinner';
 import { Badge } from '@/components/common/Badge';
 import { ScreenWrapper } from '@/components/common/ScreenWrapper';
+import { MembersOnly } from '@/components/common/MembersOnly';
+import { useAuth } from '@/hooks/useAuth';
 import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { Spacing } from '@/theme/spacing';
@@ -33,9 +35,15 @@ export function TenderDetailScreen({ route }: { route: any }) {
 
   // Fetches the full tender record from GET /tenders/{tenderId}/ whenever
   // tenderId changes, clearing the loading state once the request settles.
+  // Members only (the API 401s guests): wait for a token; re-runs after signing in.
+  const { isAuthenticated } = useAuth();
   useEffect(() => {
+    if (!isAuthenticated) return;
     tenderService.get(tenderId).then(({ data }) => setTender(data)).finally(() => setLoading(false));
-  }, [tenderId]);
+  }, [isAuthenticated, tenderId]);
+
+  // Guests (e.g. after signing out on this screen) get the sign-in prompt, not a request.
+  if (!isAuthenticated) return <ScreenWrapper><MembersOnly what="this tender" /></ScreenWrapper>;
 
   // Loading state: show a spinner until the fetch above resolves
   if (loading) return <Spinner />;

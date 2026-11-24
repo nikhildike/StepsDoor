@@ -28,6 +28,8 @@ import { Spinner } from '@/components/common/Spinner';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Badge } from '@/components/common/Badge';
 import { ScreenWrapper } from '@/components/common/ScreenWrapper';
+import { MembersOnly } from '@/components/common/MembersOnly';
+import { useAuth } from '@/hooks/useAuth';
 import { CompanyDirectorySection } from '@/components/companies/CompanyDirectorySection';
 import { FilterPickerButton, FilterOption } from '@/components/common/FilterPickerButton';
 import { useThemeColors, ThemeColors } from '@/theme/colors';
@@ -158,6 +160,9 @@ export function HomeScreen({ navigation }: { navigation: any }) {
 
   // Govt Jobs — fetched (and refetched on search/filter change) only once
   // this segment is actually selected, since it's not the default view.
+  // Members only: guests see a sign-in prompt and nothing is fetched; the
+  // effect re-runs when they sign in (isAuthenticated is a dependency).
+  const { isAuthenticated } = useAuth();
   const [govtJobs, setGovtJobs] = useState<GovtJob[]>([]);
   const [govtJobsLoading, setGovtJobsLoading] = useState(false);
   const [govtSearch, setGovtSearch] = useState('');
@@ -166,7 +171,7 @@ export function HomeScreen({ navigation }: { navigation: any }) {
   const [govtStates, setGovtStates] = useState<FilterOption[]>([]); // distinct states with counts, for the picker
   const govtStatesFetchedRef = useRef(false);
   useEffect(() => {
-    if (segment !== 'govtJobs') return;
+    if (segment !== 'govtJobs' || !isAuthenticated) return;
     // Distinct-states list only needs fetching once — it's not
     // search/filter-dependent, unlike the job list below.
     if (!govtStatesFetchedRef.current) {
@@ -184,7 +189,7 @@ export function HomeScreen({ navigation }: { navigation: any }) {
       .then(({ data }) => setGovtJobs(data.results ?? data))
       .catch(() => setGovtJobs([]))
       .finally(() => setGovtJobsLoading(false));
-  }, [segment, govtSearch, govtState, govtCategory]);
+  }, [segment, isAuthenticated, govtSearch, govtState, govtCategory]);
 
   // Companies — fetched once, the first time this segment is selected
   // (a static subscriber list doesn't need refetching on every switch).
@@ -249,7 +254,11 @@ export function HomeScreen({ navigation }: { navigation: any }) {
         </>
       )}
 
-      {segment === 'govtJobs' && (
+      {segment === 'govtJobs' && !isAuthenticated && (
+        <MembersOnly what="the latest government job openings" />
+      )}
+
+      {segment === 'govtJobs' && isAuthenticated && (
         <>
           <View style={styles.searchBar}>
             <TextInput

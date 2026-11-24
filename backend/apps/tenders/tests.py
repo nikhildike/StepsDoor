@@ -328,3 +328,43 @@ class ScheduleTests(TestCase):
         with mock.patch.object(scrape_portal, 'apply_async') as apply_async:
             self.assertEqual(scrape_all_portals(expires_seconds=3000), 1)
         apply_async.assert_called_once_with(args=['a.example.gov.in'], expires=3000)
+
+
+class MembersOnlyApiTests(TestCase):
+    """Scraped tenders and govt jobs are only served to logged-in users."""
+
+    ENDPOINTS = ('/api/tenders/', '/api/tenders/states/', '/api/govtjobs/', '/api/govtjobs/states/')
+
+    def setUp(self):
+        """One visible tender and govt job, plus a regular job-seeker account."""
+        from apps.authentication.models import User
+        self.tender = Tender.objects.create(
+            source_portal='etenders.hry.nic.in', tender_id='2026_HRY_1_1', title='Road repair',
+            organisation='MC Karnal', state='Haryana', published_at=timezone.now(),
+            source_url='https://etenders.hry.nic.in/nicgep/app',
+        )
+        self.job = GovtJob.objects.create(
+            source_portal='upsc.gov.in', job_id='advt:2026-13', title='UPSC Advt 13/2026',
+            organisation='UPSC', published_at=timezone.now(), source_url='https://upsc.gov.in/advertisements/',
+        )
+        self.user = User.objects.create_user(username='seeker', email='seeker@example.com', password='x', is_job_seeker=True)
+
+    def test_anonymous_gets_401_everywhere(self):
+        """List, detail and the /states/ facet all refuse anonymous requests."""
+        from rest_framework.test import APIClient
+        client = APIClient()
+        urls = list(self.ENDPOINTS) + [f'/api/tenders/{self.tender.pk}/', f'/api/govtjobs/{self.job.pk}/']
+        for url in urls:
+            with self.subTest(url=url):
+                self.assertEqual(client.get(url).status_code, 401)
+
+    def test_logged_in_user_can_browse(self):
+        """Any authenticated account (not just contractors) can list and open listings."""
+        from rest_framework.test import APIClient
+        client = APIClient()
+        client.force_authenticate(self.user)
+        for url in self.ENDPOINTS:
+            with self.subTest(url=url):
+                self.assertEqual(client.get(url).status_code, 200)
+        self.assertEqual(client.get(f'/api/tenders/{self.tender.pk}/').data['tender_id'], '2026_HRY_1_1')
+        self.assertEqual(client.get(f'/api/govtjobs/{self.job.pk}/').data['job_id'], 'advt:2026-13')

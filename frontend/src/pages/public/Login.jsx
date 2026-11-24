@@ -10,7 +10,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -30,6 +30,7 @@ const schema = z.object({
  */
 export default function Login() {
   const { login } = useAuth()
+  const location = useLocation() // may carry { from } — passed on to Register so the return path survives switching forms
   const [error, setError] = useState('') // top-of-form error banner text (e.g. invalid credentials)
   // React Hook Form wired to the Zod schema above for client-side validation
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
@@ -98,7 +99,7 @@ export default function Login() {
 
         <p className="text-center text-sm text-muted-foreground">
           Don't have an account?{' '}
-          <Link to="/register" className="text-primary hover:underline font-medium">Register</Link>
+          <Link to="/register" state={location.state} className="text-primary hover:underline font-medium">Register</Link>
         </p>
       </div>
     </div>
