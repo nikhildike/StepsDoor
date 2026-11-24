@@ -67,14 +67,15 @@ class TenderAlertAdmin(admin.ModelAdmin):
 @admin.register(ScraperLog)
 class ScraperLogAdmin(admin.ModelAdmin):
     """
-    Read-only admin screen for scrape-run history, written by `apps.tenders.tasks.scrape_portal`.
+    Read-only admin screen for scrape-run history (tender and govt job portals), written by
+    `apps.tenders.scraping.run_source` and `scrapers.pipelines.ScraperLogPipeline`.
 
     This is the primary place staff check to see whether the every-6-hours scheduled scrapes
     are succeeding, and to read `error_message` when a portal starts failing.
     """
-    list_display = ['portal', 'status', 'tenders_found', 'tenders_new', 'started_at', 'finished_at']
+    list_display = ['portal', 'status', 'items_found', 'items_new', 'started_at', 'finished_at']
     list_filter = ['portal', 'status']  # filter by portal to check one source's history, or by status to find recent failures
-    readonly_fields = ['portal', 'status', 'tenders_found', 'tenders_new', 'error_message', 'started_at', 'finished_at']  # entire log is system-written; nothing here should be hand-edited
+    readonly_fields = ['portal', 'status', 'items_found', 'items_new', 'error_message', 'started_at', 'finished_at']  # entire log is system-written; nothing here should be hand-edited
 
     def has_add_permission(self, request):
         """Disable manual creation of log rows — ScraperLog entries only make sense as output of an actual scrape run."""

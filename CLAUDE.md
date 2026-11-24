@@ -186,23 +186,30 @@ Portals are registered in the DB via the `ScraperSource` model (`apps/tenders/mo
 
 ```
 Celery Beat (every 6 hours)
-  → scrape_all_portals task
-      → queries active ScraperSource rows, calls scrape_portal.delay(portal_name) per portal
+  → scrape_all_portals / scrape_all_govtjob_portals tasks
+      → one scrape_portal / scrape_govtjob_portal .delay(portal_name) per active source
   → scrape_portal(portal_name) task
-      → looks up ScraperSource, runs its spider (start_url + source_portal passed in)
-      → TenderPipeline / GovtJobPipeline .process_item() → update_or_create() on Tender/GovtJob
-      → ScraperLog updated
-  → match_tender_alerts task
-      → new tenders (last 24h) matched against TenderAlert records
-      → notification dispatch (FCM + email — notifications app, TODO as of now)
+      → apps.tenders.scraping.run_source(): creates ScraperLog, runs `scrapy crawl` as a CHILD PROCESS
+      → TenderPipeline / GovtJobPipeline → update_or_create() on Tender/GovtJob
+      → ScraperLogPipeline → final status + counts on ScraperLog, stamps ScraperSource.last_scraped_at
+  → match_tender_alerts / match_govtjob_alerts tasks
+      → new listings (last 24h) matched against alerts; notification dispatch still TODO
+Celery Beat (daily)
+  → expire_stale_listings → hides listings past deadline or unseen for LISTING_STALE_DAYS
 ```
+
+- **Never run `CrawlerProcess` inside a Celery task.** Twisted's reactor can't restart in a long-lived worker (`ReactorNotRestartable` from the second task on), which is why `run_source()` uses a subprocess. `run_scrapers` runs in-process only because the CLI exits afterwards.
+- **ScraperLog status**: SUCCESS = items saved, no errors; PARTIAL = items saved but errors logged or time limit hit; FAILED = crash/timeout/abnormal finish *or zero items* (usually means the portal's layout changed). Only non-FAILED runs set `last_scraped_at`, and `expire_stale_listings` only hides "unseen" listings on portals with a recent non-FAILED run, so a broken spider can't wipe a portal's listings.
+- Scraped dates are naive IST; `_parse_dt` pins them to `Asia/Kolkata` (project `TIME_ZONE` is UTC).
+- Tunables in `base.py`: `SCRAPER_RUN_TIMEOUT` (default 1800s per crawl), `LISTING_STALE_DAYS` (default 14).
+- Test one portal through the real path from the Django shell: `run_source(ScraperSource.objects.get(...))` (works on inactive sources). Tests: `python manage.py test apps.tenders`.
 
 Most Indian govt portals run the same NIC eProcurement software, so `generic_tender_spider.py` and `generic_govtjob_spider.py` (`scrapers/spiders/`) handle them via shared CSS selectors — adding a portal is usually just a new `ScraperSource` row via Django admin, no code. `mahatenders_spider.py` is an example of a portal-specific spider for one that needs custom handling.
 
 To add a new portal:
 1. If it runs standard NIC software, add a `ScraperSource` row via Django admin (`/admin/tenders/scrapersource/`) — set `url` and `source_type`, leave the rest blank.
 2. If it needs custom parsing, create `backend/scrapers/spiders/<name>_spider.py` and set `spider_name` on the `ScraperSource` row to match.
-3. Schedule `scrape_all_portals` / `match_tender_alerts` via Django admin → Periodic Tasks (django-celery-beat) if not already running.
+3. Schedule `scrape_all_portals` / `scrape_all_govtjob_portals` / `match_tender_alerts` / `match_govtjob_alerts` / `expire_stale_listings` via Django admin → Periodic Tasks (django-celery-beat) if not already running.
 
 ---
 

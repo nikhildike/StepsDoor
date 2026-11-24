@@ -6,8 +6,11 @@ After `python manage.py migrate`, add periodic tasks in the Django admin
 at /admin/django_celery_beat/periodictask/.
 
 Recommended schedule:
-  - scrape_all_portals  → every 6 hours
-  - match_tender_alerts → every 6 hours (after scraping)
+  - scrape_all_portals    → every 6 hours
+  - match_tender_alerts   → every 6 hours (after scraping)
+  - expire_stale_listings → once a day (covers govt jobs too)
+
+Each portal's crawl runs in its own child process (see apps.tenders.scraping).
 """
 import logging
 from celery import shared_task
@@ -15,61 +18,31 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=300)
-def scrape_portal(self, portal_name: str):
+@shared_task
+def scrape_portal(portal_name: str):
     """
-    Run the Scrapy spider for a single portal.
+    Run the Scrapy spider for a single tender portal and return the run's status.
 
-    Looks up `spider_name` and start URL from the matching `ScraperSource` row in the DB
-    (keyed by `source_portal`), then runs that spider synchronously inside the Celery worker
-    process. The spider's `TenderPipeline.process_item()` handles the actual
-    `Tender.objects.update_or_create()` dedup/write as items are yielded.
+    Looks up the active tender `ScraperSource` keyed by `source_portal` and hands it to
+    `apps.tenders.scraping.run_source()`, which crawls it in a child process and records a
+    ScraperLog. Called by `scrape_all_portals` (Celery Beat fan-out) or ad hoc via the
+    "Scrape selected sources now" admin action (`ScraperSourceAdmin.scrape_now`).
 
-    Called either by `scrape_all_portals` (Celery Beat's every-6-hours schedule, one call per
-    active tender `ScraperSource`) or ad hoc via the "Scrape selected sources now" admin
-    action (`ScraperSourceAdmin.scrape_now`). Retries up to 3 times (5 min backoff) on any
-    exception, e.g. transient network/portal errors.
+    No Celery-level retry: Scrapy already retries failed requests (RETRY_TIMES in
+    scrapers/settings.py), and re-running a whole crawl that failed because its selectors
+    no longer match would just fail again. The next scheduled run is the retry.
     """
-    from scrapy.crawler import CrawlerProcess
-    from scrapy.utils.project import get_project_settings
-    from apps.tenders.models import ScraperLog, ScraperSource
+    from apps.tenders.models import ScraperSource
+    from apps.tenders.scraping import run_source
 
-    try:
-        source = ScraperSource.objects.get(source_portal=portal_name, is_active=True)
-    except ScraperSource.DoesNotExist:
+    source = ScraperSource.objects.filter(
+        source_portal=portal_name, source_type=ScraperSource.TYPE_TENDER, is_active=True,
+    ).first()
+    if source is None:
         # Portal may have been deactivated/removed since it was queued — skip rather than error.
-        logger.warning(f"No active ScraperSource found for portal: {portal_name}")
-        return
-
-    log = ScraperLog.objects.create(portal=portal_name)  # starts life as Status.RUNNING (model default)
-    try:
-        import os
-        os.environ.setdefault('SCRAPY_SETTINGS_MODULE', 'scrapers.settings')
-        settings = get_project_settings()
-        settings.set('SCRAPER_LOG_ID', log.id)
-
-        process = CrawlerProcess(settings)
-        # Pass start_url and source_portal so spiders can be dynamic
-        process.crawl(
-            source.spider_name,
-            start_url=source.url,
-            source_portal=source.source_portal,
-        )
-        process.start()
-
-        log.status = ScraperLog.Status.SUCCESS
-        source.last_scraped_at = timezone.now()
-        source.save(update_fields=['last_scraped_at'])
-    except Exception as exc:
-        log.status = ScraperLog.Status.FAILED
-        log.error_message = str(exc)
-        logger.exception(f"Scraper failed for {portal_name}: {exc}")
-        raise self.retry(exc=exc)
-    finally:
-        # Always stamp finish time and persist status, whether the run succeeded or failed
-        # (the retry above re-raises, so this finally still runs before the task re-queues).
-        log.finished_at = timezone.now()
-        log.save()
+        logger.warning(f"No active tender ScraperSource found for portal: {portal_name}")
+        return None
+    return run_source(source).status
 
 
 @shared_task
@@ -143,3 +116,63 @@ def match_tender_alerts():
             logger.info(f"Alert match: {alert.user.email} — {count} new tender(s)")
 
     logger.info(f"Tender alert matching done. {matched} notifications queued.")
+
+
+@shared_task
+def expire_stale_listings():
+    """
+    Hide tenders and govt jobs that are no longer open, and close out dead scrape logs.
+
+    Nothing else ever sets `is_active=False`, so without this task expired listings stay
+    visible forever. Intended to run once a day via Celery Beat (any time; it's idempotent).
+    A listing is hidden when either:
+
+    1. Its deadline has passed (`submission_deadline` / `application_deadline`), or
+    2. It hasn't been seen for `LISTING_STALE_DAYS` while its portal is scraping fine —
+       i.e. the portal had a run that saved data within the last 2 days, yet this listing
+       wasn't among the items saved since. Requiring a recent good run means a broken
+       spider can never cause a portal's listings to be mass-hidden.
+
+    Also marks ScraperLog rows stuck in RUNNING for more than twice `SCRAPER_RUN_TIMEOUT`
+    as FAILED — those are runs whose process was killed before it could record a result.
+
+    Returns a dict of counts for the Celery result / manual runs from the shell.
+    """
+    from datetime import timedelta
+    from django.conf import settings
+    from apps.govtjobs.models import GovtJob
+    from apps.tenders.models import ScraperLog, ScraperSource, Tender
+
+    now = timezone.now()
+    stale_before = now - timedelta(days=settings.LISTING_STALE_DAYS)
+    recently_ok = now - timedelta(days=2)
+    counts = {}
+
+    for model, deadline_field, source_type in (
+        (Tender, 'submission_deadline', ScraperSource.TYPE_TENDER),
+        (GovtJob, 'application_deadline', ScraperSource.TYPE_GOVT_JOB),
+    ):
+        active = model.objects.filter(is_active=True)
+        # .update() skips save(), so search vectors aren't needlessly recomputed.
+        counts[f'{model.__name__}_past_deadline'] = active.filter(
+            **{f'{deadline_field}__lt': now}
+        ).update(is_active=False)
+
+        healthy_portals = ScraperSource.objects.filter(
+            source_type=source_type, last_scraped_at__gte=recently_ok,
+        ).values_list('source_portal', flat=True)
+        counts[f'{model.__name__}_unseen'] = active.filter(
+            source_portal__in=list(healthy_portals), updated_at__lt=stale_before,
+        ).update(is_active=False)
+
+    counts['dead_scraper_logs'] = ScraperLog.objects.filter(
+        status=ScraperLog.Status.RUNNING,
+        started_at__lt=now - timedelta(seconds=2 * settings.SCRAPER_RUN_TIMEOUT),
+    ).update(
+        status=ScraperLog.Status.FAILED,
+        error_message='Run never finished — the crawl process was killed or the worker died.',
+        finished_at=now,
+    )
+
+    logger.info(f"expire_stale_listings: {counts}")
+    return counts

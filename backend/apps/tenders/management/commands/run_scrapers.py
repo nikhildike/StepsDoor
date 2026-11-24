@@ -18,8 +18,10 @@ class Command(BaseCommand):
     Runs the same spiders as the `scrape_portal`/`scrape_govtjob_portal` Celery tasks, but
     synchronously in the current process against every (or a filtered subset of) active
     `ScraperSource` rows — useful for local development or one-off manual runs where spinning
-    up Celery Beat/worker isn't desired. Does not write `ScraperLog` rows (that bookkeeping
-    is specific to the Celery task path).
+    up Celery Beat/worker isn't desired. Each spider still gets its own `ScraperLog` row,
+    created by `scrapers.pipelines.ScraperLogPipeline`. Running every crawl in one process
+    is safe here because the process exits afterwards (unlike a Celery worker, where the
+    Twisted reactor can't be restarted — see `apps.tenders.scraping`).
     """
     help = 'Run all active scrapers and save results to the database'
 

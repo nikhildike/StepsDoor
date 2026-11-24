@@ -190,7 +190,7 @@ class ScraperSource(models.Model):
     state = models.CharField(max_length=100, blank=True,
         help_text="State this portal covers (leave blank for national portals).")  # optional metadata for state-specific portals; not used for filtering scrape queues
     is_active = models.BooleanField(default=True)  # only active sources are scraped by scrape_all_portals/scrape_all_govtjob_portals or picked up by run_scrapers
-    last_scraped_at = models.DateTimeField(null=True, blank=True)  # stamped by scrape_portal() after a successful run; null until the first successful scrape
+    last_scraped_at = models.DateTimeField(null=True, blank=True)  # stamped by ScraperLogPipeline after a run that saved data (SUCCESS or PARTIAL); null until then
     notes = models.TextField(blank=True)  # free-text admin notes (e.g. quirks of this portal, known issues)
     created_at = models.DateTimeField(auto_now_add=True)  # when this source was registered
 
@@ -226,27 +226,30 @@ class ScraperSource(models.Model):
 
 class ScraperLog(models.Model):
     """
-    Audit record for a single scrape run of one portal.
+    Audit record for a single scrape run of one portal (tender or govt job).
 
-    Created by `apps.tenders.tasks.scrape_portal` at the start of each run (status=RUNNING)
-    and updated to SUCCESS/FAILED once the spider finishes (or raises). Read-only in the
-    Django admin (`ScraperLogAdmin.has_add_permission` returns False) — it exists purely so
-    admins can monitor scrape health without tailing Celery worker logs.
+    Created at the start of each run with status=RUNNING — by
+    `apps.tenders.scraping.run_source()` for Celery/admin runs, or by
+    `scrapers.pipelines.ScraperLogPipeline` for `run_scrapers`/bare `scrapy crawl` runs.
+    The pipeline sets the final status and counts when the spider closes; `run_source()`
+    marks it FAILED if the crawl process crashes or times out before that happens.
+    Read-only in the Django admin — it exists so admins can monitor scrape health
+    without tailing Celery worker logs.
     """
     class Status(models.TextChoices):
-        """Lifecycle states a scrape run can be in; also used by GovtJob's equivalent log."""
-        RUNNING = 'running', 'Running'  # set when ScraperLog.objects.create() runs, before the spider starts
-        SUCCESS = 'success', 'Success'  # set when the spider process completes without raising
-        PARTIAL = 'partial', 'Partial'  # reserved for runs that complete but with some items failing (not currently set by scrape_portal, which only sets SUCCESS/FAILED)
-        FAILED = 'failed', 'Failed'  # set in the except block of scrape_portal when the crawl raises
+        """Lifecycle states a scrape run can be in (decided in ScraperLogPipeline._close_sync)."""
+        RUNNING = 'running', 'Running'  # run in progress (or the process died without finishing — see expire_stale_listings)
+        SUCCESS = 'success', 'Success'  # finished normally, saved items, no errors
+        PARTIAL = 'partial', 'Partial'  # saved items, but errors were logged or the run hit its time limit
+        FAILED = 'failed', 'Failed'  # crashed, timed out, ended early, or saved zero items
 
     portal = models.CharField(max_length=100)  # source_portal this run scraped, e.g. "mahatenders.gov.in"
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.RUNNING)  # current lifecycle state, see Status above
-    tenders_found = models.IntegerField(default=0)  # total items the spider yielded this run (not currently populated by scrape_portal — reserved for future pipeline stats)
-    tenders_new = models.IntegerField(default=0)  # count of items that were newly created (vs. updated) this run (not currently populated by scrape_portal — reserved for future pipeline stats)
-    error_message = models.TextField(blank=True)  # exception text captured when status=FAILED, for admin debugging
+    items_found = models.IntegerField(default=0)  # tenders/govt jobs saved (created or updated) this run
+    items_new = models.IntegerField(default=0)  # subset of items_found that were newly created
+    error_message = models.TextField(blank=True)  # why the run was FAILED/PARTIAL (or the crash output tail), for admin debugging
     started_at = models.DateTimeField(auto_now_add=True)  # stamped when the log row is created, i.e. run start
-    finished_at = models.DateTimeField(null=True, blank=True)  # stamped in scrape_portal's finally block; null while status=RUNNING
+    finished_at = models.DateTimeField(null=True, blank=True)  # stamped when the run ends; null while status=RUNNING
 
     class Meta:
         ordering = ['-started_at']  # most recent runs first, for the admin log list

@@ -59,13 +59,15 @@ RETRY_TIMES = 3  # retry up to 3 times before giving up on a request
 # 429 too many requests (common when a portal starts throttling us)
 RETRY_HTTP_CODES = [500, 502, 503, 504, 408, 429]
 
-# Pipelines — both run for every spider; each checks the item's shape (a
-# 'tender_id' or 'job_id' key) to decide whether it's the right handler,
-# passing items it doesn't own through unchanged. Numbers are execution order
-# (lower runs first): TenderPipeline (300) before GovtJobPipeline (301).
+# Pipelines — all run for every spider. The two saving pipelines check the
+# item's shape (a 'tender_id' or 'job_id' key) to decide whether it's theirs,
+# passing other items through unchanged. ScraperLogPipeline runs last so it
+# only counts items that were actually saved. Numbers are execution order
+# (lower runs first).
 ITEM_PIPELINES = {
-    'scrapers.pipelines.TenderPipeline':  300,
-    'scrapers.pipelines.GovtJobPipeline': 301,
+    'scrapers.pipelines.TenderPipeline':     300,
+    'scrapers.pipelines.GovtJobPipeline':    301,
+    'scrapers.pipelines.ScraperLogPipeline': 900,
 }
 
 # Downloader middlewares — applied to every outgoing request/incoming response

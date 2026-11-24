@@ -16,53 +16,28 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=300)
-def scrape_govtjob_portal(self, portal_name: str):
+@shared_task
+def scrape_govtjob_portal(portal_name: str):
     """
-    Run the Scrapy spider for a single govt job portal.
-    Reads spider_name and start URL from ScraperSource in the DB.
+    Run the Scrapy spider for a single govt job portal and return the run's status.
 
-    Invoked per-portal by `scrape_all_govtjob_portals` (itself triggered on a
-    schedule by Celery Beat), or manually for a single portal. Retries up to
-    3 times with a 5-minute delay on failure (bind=True gives access to
-    `self.retry`), since scraper failures are often transient (network
-    hiccups, portal downtime).
+    Hands the active govt-job `ScraperSource` to `apps.tenders.scraping.run_source()`,
+    which crawls it in a child process and records a ScraperLog (shared with tender runs).
+    Invoked per-portal by `scrape_all_govtjob_portals` (Celery Beat fan-out) or the admin
+    "Scrape now" action. No Celery-level retry, for the same reasons as
+    `apps.tenders.tasks.scrape_portal`.
     """
-    from scrapy.crawler import CrawlerProcess
-    from scrapy.utils.project import get_project_settings
     from apps.tenders.models import ScraperSource
+    from apps.tenders.scraping import run_source
 
-    try:
-        source = ScraperSource.objects.get(
-            source_portal=portal_name,
-            source_type=ScraperSource.TYPE_GOVT_JOB,
-            is_active=True,
-        )
-    except ScraperSource.DoesNotExist:
+    source = ScraperSource.objects.filter(
+        source_portal=portal_name, source_type=ScraperSource.TYPE_GOVT_JOB, is_active=True,
+    ).first()
+    if source is None:
         # Portal may have been deactivated/removed since this task was queued — nothing to do
         logger.warning(f"No active govt job ScraperSource found for portal: {portal_name}")
-        return
-
-    try:
-        import os
-        os.environ.setdefault('SCRAPY_SETTINGS_MODULE', 'scrapers.settings')
-        settings = get_project_settings()
-
-        process = CrawlerProcess(settings)
-        process.crawl(
-            source.spider_name,
-            start_url=source.url,
-            source_portal=source.source_portal,
-        )
-        process.start()
-
-        # Record the successful run so admins/monitoring can see when this portal was last scraped
-        source.last_scraped_at = timezone.now()
-        source.save(update_fields=['last_scraped_at'])
-        logger.info(f"Scraped govt job portal: {portal_name}")
-    except Exception as exc:
-        logger.exception(f"Govt job scraper failed for {portal_name}: {exc}")
-        raise self.retry(exc=exc)
+        return None
+    return run_source(source).status
 
 
 @shared_task

@@ -331,6 +331,14 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 # Scraper runs every 6 hours
 SCRAPER_SCHEDULE_HOURS = config('SCRAPER_SCHEDULE_HOURS', default=6, cast=int)
 
+# Hard limit (seconds) on one portal's crawl process (apps.tenders.scraping.run_source).
+# Spiders are asked to stop themselves ~2 minutes earlier so their data is kept.
+SCRAPER_RUN_TIMEOUT = config('SCRAPER_RUN_TIMEOUT', default=1800, cast=int)
+
+# expire_stale_listings hides a tender/govt job that a working portal hasn't
+# listed for this many days (see apps.tenders.tasks.expire_stale_listings).
+LISTING_STALE_DAYS = config('LISTING_STALE_DAYS', default=14, cast=int)
+
 
 # ===========================================================================
 # CACHE (django-redis — falls back to in-memory in dev if Redis unavailable)
