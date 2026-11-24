@@ -339,6 +339,13 @@ SCRAPER_RUN_TIMEOUT = config('SCRAPER_RUN_TIMEOUT', default=1800, cast=int)
 # listed for this many days (see apps.tenders.tasks.expire_stale_listings).
 LISTING_STALE_DAYS = config('LISTING_STALE_DAYS', default=14, cast=int)
 
+# alert_failing_scrapers (daily) emails these addresses when an active source's last
+# SCRAPER_ALERT_AFTER_FAILURES runs all FAILED — usually a portal redesign (see the
+# "When a portal changes its website" runbook in CLAUDE.md). Comma-separated; when
+# empty the digest is only written to the worker log.
+SCRAPER_ALERT_EMAILS = config('SCRAPER_ALERT_EMAILS', default='', cast=Csv())
+SCRAPER_ALERT_AFTER_FAILURES = config('SCRAPER_ALERT_AFTER_FAILURES', default=3, cast=int)
+
 
 # ===========================================================================
 # CACHE (django-redis — falls back to in-memory in dev if Redis unavailable)

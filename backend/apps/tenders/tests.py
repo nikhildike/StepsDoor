@@ -390,3 +390,49 @@ class PurgeLegacyListingsTests(TestCase):
         call_command('purge_legacy_listings', stdout=StringIO())
         self.assertEqual(list(Tender.objects.values_list('title', flat=True)), ['keep'])
         self.assertEqual(list(GovtJob.objects.values_list('title', flat=True)), ['keep'])
+
+
+@override_settings(SCRAPER_ALERT_AFTER_FAILURES=3, SCRAPER_ALERT_EMAILS=['ops@example.com'])
+class FailingScraperAlertTests(TestCase):
+    """alert_failing_scrapers: who gets reported, and the email it sends."""
+
+    def setUp(self):
+        """Two active sources and one inactive one."""
+        self.broken = ScraperSource.objects.create(url='https://broken.example.gov.in')
+        self.flaky = ScraperSource.objects.create(url='https://flaky.example.gov.in')
+        self.off = ScraperSource.objects.create(url='https://off.example.gov.in', is_active=False)
+
+    def runs(self, source, *statuses):
+        """Record runs oldest-first with the given statuses, spaced an hour apart."""
+        start = timezone.now() - timedelta(hours=len(statuses))
+        for i, status in enumerate(statuses):
+            log = ScraperLog.objects.create(portal=source.source_portal, status=status, error_message=f'{status} #{i}')
+            ScraperLog.objects.filter(pk=log.pk).update(started_at=start + timedelta(hours=i), finished_at=start + timedelta(hours=i))
+
+    def test_reports_only_active_sources_with_a_long_enough_failure_streak(self):
+        """3 consecutive failures → reported; a success inside the last 3 or an inactive source → not."""
+        from django.core import mail
+        from apps.tenders.tasks import alert_failing_scrapers
+        S = ScraperLog.Status
+        self.runs(self.broken, S.SUCCESS, S.FAILED, S.FAILED, S.FAILED)
+        self.runs(self.flaky, S.FAILED, S.FAILED, S.PARTIAL, S.FAILED, S.FAILED)  # streak of 2
+        self.runs(self.off, S.FAILED, S.FAILED, S.FAILED)
+
+        with self.assertLogs('apps.tenders.tasks', level='ERROR'):
+            self.assertEqual(alert_failing_scrapers(), 1)
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.to, ['ops@example.com'])
+        self.assertIn('broken.example.gov.in', message.body)
+        self.assertIn('3 failed runs', message.body)
+        self.assertIn('failed #3', message.body)  # newest error
+        self.assertNotIn('flaky.example.gov.in', message.body)
+        self.assertNotIn('off.example.gov.in', message.body)
+
+    def test_nothing_failing_sends_nothing(self):
+        """No streaks → no email, returns 0."""
+        from django.core import mail
+        from apps.tenders.tasks import alert_failing_scrapers
+        self.runs(self.broken, ScraperLog.Status.FAILED, ScraperLog.Status.SUCCESS)
+        self.assertEqual(alert_failing_scrapers(), 0)
+        self.assertEqual(mail.outbox, [])

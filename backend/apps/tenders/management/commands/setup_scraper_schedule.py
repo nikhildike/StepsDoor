@@ -47,6 +47,13 @@ SCHEDULE = {
         6 * 3600,
         'The task matches tenders created in the last 24 hours, so running it daily avoids repeat matches.',
     ),
+    'Alert on failing scrapers (daily)': (
+        'apps.tenders.tasks.alert_failing_scrapers',
+        {'minute': '0', 'hour': '9'},
+        {},
+        6 * 3600,
+        'Emails SCRAPER_ALERT_EMAILS about sources whose last few runs all failed (usually a site redesign).',
+    ),
     'Match govt job alerts (daily)': (
         'apps.govtjobs.tasks.match_govtjob_alerts',
         {'minute': '40', 'hour': '7'},
@@ -61,7 +68,7 @@ class Command(BaseCommand):
     """
     `python manage.py setup_scraper_schedule` — idempotently registers the PeriodicTask rows
     Celery Beat runs: hourly tender scraping, 6-hourly govt job scraping, daily expiry and
-    daily alert matching (see SCHEDULE for times and reasons).
+    daily alert matching, and a daily failing-scraper alert (see SCHEDULE for times and reasons).
     """
     help = 'Create (or with --reset, restore) the Celery Beat schedule for scrapers, alerts and expiry'
 

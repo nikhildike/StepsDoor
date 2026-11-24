@@ -6,6 +6,7 @@ created by `python manage.py setup_scraper_schedule` (see that command for times
   - scrape_all_portals    → hourly (NIC portals only expose their 10 newest tenders)
   - match_tender_alerts   → daily (its window is the last 24 hours)
   - expire_stale_listings → daily (covers govt jobs too)
+  - alert_failing_scrapers → daily (emails SCRAPER_ALERT_EMAILS about broken sources)
 
 Each portal's crawl runs in its own child process (see apps.tenders.scraping).
 """
@@ -175,3 +176,94 @@ def expire_stale_listings():
 
     logger.info(f"expire_stale_listings: {counts}")
     return counts
+
+
+def failing_sources(threshold):
+    """
+    Active sources whose last `threshold` runs all FAILED, with their streak details.
+
+    A single failure is usually a portal being briefly down; `threshold` consecutive
+    failures (default 3) usually means the site changed and the spider needs updating.
+    Returns a list of dicts: source, streak (consecutive FAILED runs, newest first),
+    last_error, failing_since, last_success (finished_at of the last non-FAILED run or None).
+
+    Logs are matched to sources by portal; a domain registered as both a tender and a
+    govt-job source shares one log history (rare, and only matters if both are active).
+    """
+    from apps.tenders.models import ScraperLog, ScraperSource
+
+    results = []
+    for source in ScraperSource.objects.filter(is_active=True).order_by('source_type', 'source_portal'):
+        logs = list(
+            ScraperLog.objects.filter(portal=source.source_portal)
+            .exclude(status=ScraperLog.Status.RUNNING)
+            .order_by('-started_at')[:200]
+        )
+        streak = []
+        for log in logs:
+            if log.status != ScraperLog.Status.FAILED:
+                break
+            streak.append(log)
+        if len(streak) < threshold:
+            continue
+        last_success = next((log for log in logs[len(streak):]), None)
+        results.append({
+            'source': source,
+            'streak': len(streak),
+            'last_error': streak[0].error_message,
+            'failing_since': streak[-1].started_at,
+            'last_success': last_success.finished_at if last_success else None,
+        })
+    return results
+
+
+@shared_task
+def alert_failing_scrapers():
+    """
+    Daily digest of active sources that have failed their last few runs in a row.
+
+    Celery Beat runs this once a day (`setup_scraper_schedule`). It emails
+    `SCRAPER_ALERT_EMAILS` (through the configured EMAIL_BACKEND) and always logs the
+    digest at ERROR level so it also shows in the worker log. Sources stay in every
+    daily digest until a run succeeds again — the fix steps are in CLAUDE.md's
+    "When a portal changes its website" runbook. Returns the number of failing sources.
+    """
+    from django.conf import settings
+    from django.core.mail import send_mail
+
+    failing = failing_sources(settings.SCRAPER_ALERT_AFTER_FAILURES)
+    if not failing:
+        return 0
+
+    lines = [
+        f"{len(failing)} scraper source(s) have failed their last "
+        f"{settings.SCRAPER_ALERT_AFTER_FAILURES}+ runs in a row. This usually means the "
+        "portal changed its website and the spider needs updating.",
+        '',
+    ]
+    for item in failing:
+        source = item['source']
+        last_ok = f"{item['last_success']:%d %b %Y %H:%M} UTC" if item['last_success'] else 'never'
+        lines += [
+            f"- {source.source_portal} ({source.get_source_type_display()}, spider '{source.spider_name}')",
+            f"    {item['streak']} failed runs since {item['failing_since']:%d %b %Y %H:%M} UTC; last success: {last_ok}",
+            f"    Latest error: {(item['last_error'] or '(no message)')[:300]}",
+        ]
+    lines += [
+        '',
+        'Scraper logs: /admin/tenders/scraperlog/?status__exact=failed',
+        "How to fix: see 'When a portal changes its website' in CLAUDE.md.",
+    ]
+    body = '\n'.join(lines)
+    logger.error(f"alert_failing_scrapers:\n{body}")
+
+    recipients = list(settings.SCRAPER_ALERT_EMAILS)
+    if recipients:
+        send_mail(
+            subject=f'[StepsDoor] {len(failing)} scraper source(s) failing',
+            message=body,
+            from_email=None,  # DEFAULT_FROM_EMAIL
+            recipient_list=recipients,
+            fail_silently=False,  # a broken mail setup should show up as a failed task
+        )
+    return len(failing)

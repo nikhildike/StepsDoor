@@ -200,6 +200,7 @@ Celery Beat (schedule from `setup_scraper_schedule`, all times IST)
       → TenderPipeline / GovtJobPipeline → update_or_create() on Tender/GovtJob
       → ScraperLogPipeline → final status + counts on ScraperLog, stamps ScraperSource.last_scraped_at
   00:15 daily          → expire_stale_listings  (hides listings past deadline or unseen for LISTING_STALE_DAYS)
+  09:00 daily          → alert_failing_scrapers (emails SCRAPER_ALERT_EMAILS; see runbook below)
   07:30 / 07:40 daily  → match_tender_alerts / match_govtjob_alerts
       → listings created in the last 24h matched against alerts (daily, so nothing matches twice);
         notification dispatch still TODO
@@ -231,6 +232,35 @@ To add a new portal:
 1. If it's an NIC eProcurement portal, add a `ScraperSource` row via Django admin (`/admin/tenders/scrapersource/`) — set `url` and `source_type`, leave the rest blank. Add its domain → state to `scrapers/state_map.py`.
 2. Otherwise create `backend/scrapers/spiders/<name>_spider.py` and set `spider_name` on the `ScraperSource` row to match.
 3. Nothing to schedule per portal — the fan-out tasks pick up every active source. In a new environment run `python manage.py setup_scraper_schedule` once.
+
+### When a portal changes its website (runbook)
+
+**1. Notice.** `alert_failing_scrapers` (daily, 09:00 IST) emails `SCRAPER_ALERT_EMAILS` — and always logs at ERROR in the worker — listing active sources whose last `SCRAPER_ALERT_AFTER_FAILURES` (default 3) runs all FAILED. One failure is usually the portal being down; a streak usually means a redesign. Details: admin → Scraper Logs, filter Status = Failed. Typical messages: "no items were saved — the page layout may have changed", or the spider's own error ("No NIC 'Latest Tenders' table…", "No chunk contains the open-CEN ticker…"). The email only sends once production email is configured (`EMAIL_BACKEND`); until then read the worker log.
+
+**2. Diagnose** (from `backend/`, venv active):
+```bash
+scrapy crawl <spider> -a start_url=<url> -a source_portal=<domain>   # full crawl log
+scrapy shell "<listing url>"                                          # try selectors: response.css('...')
+```
+For JS sites (SSC, RRB) use the browser's DevTools → Network (Fetch/XHR) to find the JSON endpoint or script the page now loads.
+
+**3. Fix** the spider in `scrapers/spiders/` — usually a selector, a detail-page label, or a URL. What each depends on:
+
+| Spider | Depends on |
+|---|---|
+| `generic_tender` | `table#activeTenders` rows; detail page `td.td_caption`/`td.td_field` labels ("Tender ID", "Bid Submission End Date", …) |
+| `upsc` | `table.exam-table tr.exam-table-row`; `table.dbim-table` + `button.view-doc-btn` (PDF URL matched by file name) |
+| `ssc` | JSON at `/api/admin/5.1/liveExams` and its field names |
+| `ibps` | `div.detail-section` blocks on /recruitment/ and /crp-updates/ |
+| `rrb` | portal page → `main-*.js` → chunk containing `initializeNotices(){this.notices=[…]}` |
+
+**Never change the id format** (NIC Tender ID; `exam:`/`advt:`/`rec:`/`crp:`/`cen:` job ids) — the same listing would be saved twice and `purge_legacy_listings` would treat the new rows as legacy.
+
+**4. Update the test.** Save the new page over its fixture (`apps/tenders/test_fixtures/`, `apps/govtjobs/test_fixtures/`; for big JS keep only the excerpt the spider reads), adjust expectations in `apps/*/tests.py`, run `python manage.py test apps.tenders apps.govtjobs`.
+
+**5. Verify live**, then deploy: in `python manage.py shell`, `run_source(ScraperSource.objects.get(source_portal='<domain>', source_type='<type>')).status` should be `'success'`. The next scheduled run picks it up.
+
+No code needed when a portal only **moved** (edit the source's `url` in admin) or for a **new NIC portal** (add a source + a `state_map.py` line). If a fix will take a while, switch the source off in admin; its saved listings stay until their deadlines pass.
 
 ---
 
