@@ -15,6 +15,7 @@ import { Search, X, Briefcase, Building2, Landmark, FileText, ShoppingBag, Store
 import { jobService } from '@/services/jobService'
 import { companyService } from '@/services/companyService'
 import { tenderService } from '@/services/tenderService'
+import { govtJobService } from '@/services/govtJobService'
 import { useAuthStore } from '@/store/authStore'
 import { useJobStore } from '@/store/jobStore'
 import { COMPANY_DIRECTORY } from '@/pages/public/Companies'
@@ -55,6 +56,9 @@ export default function GlobalSearch() {
   const [tenderResults, setTenderResults] = useState([]) // first few scraped tenders matching the query
   const [tenderCount, setTenderCount] = useState(0)      // total matches, for the "See all" link
   const [tendersLoading, setTendersLoading] = useState(false)
+  const [govtResults, setGovtResults] = useState([]) // first few scraped govt job openings matching the query
+  const [govtCount, setGovtCount] = useState(0)      // total matches, for the "See all" link
+  const [govtLoading, setGovtLoading] = useState(false)
 
   // Load registered (paying) companies once on mount so they can be matched against
   // search queries client-side alongside the static COMPANY_DIRECTORY list.
@@ -87,6 +91,20 @@ export default function GlobalSearch() {
         .then(({ data }) => { setTenderResults(data.results ?? data); setTenderCount(data.count ?? 0) })
         .catch(() => { setTenderResults([]); setTenderCount(0) })
         .finally(() => setTendersLoading(false))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [query, token])
+
+  // Debounced scraped govt-job search (members only), same pattern as tenders above.
+  useEffect(() => {
+    const q = query.trim()
+    if (!q || !token) { setGovtResults([]); setGovtCount(0); return }
+    setGovtLoading(true)
+    const t = setTimeout(() => {
+      govtJobService.list({ search: q, page_size: MAX_PER_SECTION })
+        .then(({ data }) => { setGovtResults(data.results ?? data); setGovtCount(data.count ?? 0) })
+        .catch(() => { setGovtResults([]); setGovtCount(0) })
+        .finally(() => setGovtLoading(false))
     }, 300)
     return () => clearTimeout(t)
   }, [query, token])
@@ -147,7 +165,7 @@ export default function GlobalSearch() {
 
   // Combined result count across all categories — used to decide whether to show
   // the "no results" empty state vs. the grouped results list.
-  const totalResults = jobResults.length + tenderResults.length + matchedCompanies.length + matchedTenders.length +
+  const totalResults = jobResults.length + tenderResults.length + govtResults.length + matchedCompanies.length + matchedTenders.length +
     matchedGovtJobs.length + matchedShopping.length + matchedRetail.length + matchedServices.length
 
   // Navigates to the full Jobs listing page pre-filtered by the current query.
@@ -163,6 +181,13 @@ export default function GlobalSearch() {
   function goToTenders() {
     if (!query.trim()) return
     navigate(`/tenders?search=${encodeURIComponent(query.trim())}`)
+    setOpen(false)
+  }
+
+  // Opens the full scraped govt-job list on /govt-jobs filtered by the current query.
+  function goToGovtJobs() {
+    if (!query.trim()) return
+    navigate(`/govt-jobs?search=${encodeURIComponent(query.trim())}`)
     setOpen(false)
   }
 
@@ -204,7 +229,7 @@ export default function GlobalSearch() {
       {/* Results dropdown: only rendered while open and there's an active query */}
       {open && isSearching && (
         <div className="absolute mt-1 w-96 max-w-[90vw] right-0 bg-white border border-border rounded-lg shadow-lg max-h-[70vh] overflow-y-auto z-50">
-          {(jobsLoading || tendersLoading) && totalResults === 0 ? (
+          {(jobsLoading || tendersLoading || govtLoading) && totalResults === 0 ? (
             // Loading state: shown only while the debounced job search is in flight and nothing has matched yet
             <div className="p-4 flex items-center justify-center text-muted-foreground text-sm gap-2">
               <Loader2 className="h-4 w-4 animate-spin" /> Searching...
@@ -250,7 +275,22 @@ export default function GlobalSearch() {
                 ))}
               </ResultSection>
 
-              <ResultSection title="Govt Jobs" icon={FileText}>
+              {/* Scraped govt job openings (members only), with a link to the full filtered list */}
+              <ResultSection title="Govt jobs" icon={Landmark}>
+                {govtResults.length > 0 ? [
+                  ...govtResults.map(g => (
+                    <ResultItem key={`sg-${g.id}`} onClick={() => setOpen(false)} to={`/govt-jobs/${g.id}`}
+                      title={g.title} subtitle={g.organisation} />
+                  )),
+                  <button key="sg-all" onClick={goToGovtJobs}
+                    className="w-full text-left px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/5">
+                    See all {govtCount.toLocaleString('en-IN')} opening{govtCount === 1 ? '' : 's'} →
+                  </button>,
+                ] : null}
+              </ResultSection>
+
+              {/* Official recruitment portal directory (static, public) */}
+              <ResultSection title="Recruitment portals" icon={FileText}>
                 {matchedGovtJobs.map(g => (
                   <ResultItem key={`g-${g.state || ''}-${g.name}`} onClick={() => setOpen(false)} href={g.url} title={g.name} subtitle={g.state ? `${g.state} — ${g.category}` : g.category} />
                 ))}

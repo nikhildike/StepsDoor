@@ -15,10 +15,18 @@ vi.mock('@/services/tenderService', () => ({
     })),
   },
 }))
+vi.mock('@/services/govtJobService', () => ({
+  govtJobService: {
+    list: vi.fn(() => Promise.resolve({
+      data: { count: 2, results: [{ id: 8, title: 'RRB CEN 08/2026 — STATION MASTER', organisation: 'Railway Recruitment Boards (RRB)' }] },
+    })),
+  },
+}))
 vi.mock('@/services/jobService', () => ({ jobService: { list: vi.fn(() => Promise.resolve({ data: { results: [] } })) } }))
 vi.mock('@/services/companyService', () => ({ companyService: { list: vi.fn(() => Promise.resolve({ data: [] })) } }))
 
 import { tenderService } from '@/services/tenderService'
+import { govtJobService } from '@/services/govtJobService'
 import { useAuthStore } from '@/store/authStore'
 import GlobalSearch from './GlobalSearch'
 
@@ -65,5 +73,16 @@ describe('GlobalSearch tenders', () => {
     renderSearch()
     await userEvent.type(screen.getByPlaceholderText('Search everything...'), 'bridge{Enter}')
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/tenders?search=bridge'))
+  })
+
+  it('shows scraped govt job openings to members with a See all link', async () => {
+    useAuthStore.setState({ token: 'jwt', user: { is_job_seeker: true } })
+    renderSearch()
+    await userEvent.type(screen.getByPlaceholderText('Search everything...'), 'station')
+    const result = await screen.findByRole('link', { name: /STATION MASTER/ })
+    expect(result).toHaveAttribute('href', '/govt-jobs/8')
+    await userEvent.click(screen.getByRole('button', { name: /See all 2 openings/ }))
+    expect(screen.getByTestId('location')).toHaveTextContent('/govt-jobs?search=station')
+    expect(govtJobService.list).toHaveBeenLastCalledWith({ search: 'station', page_size: 4 })
   })
 })

@@ -202,6 +202,11 @@ export default function App() {
         {/* Tender listings rendered inside the seeker layout so contractors keep
             the sidebar visible when browsing tenders from their dashboard. */}
         <Route path="tenders" element={<Tenders />} />
+        {/* Govt jobs (latest openings + portal directory) inside the job seeker dashboard. */}
+        <Route path="govt-jobs" element={<GovtJobs />} />
+        {/* Listing detail pages opened from the dashboard lists stay in the dashboard. */}
+        <Route path="tenders/:id" element={<TenderDetail />} />
+        <Route path="govt-jobs/:id" element={<GovtJobDetail />} />
         {/* Contractors post and manage jobs from their own dashboard (same pages as
             /dashboard/post-job and /dashboard/jobs; the API allows company and
             contractor accounts — see CanPostJobs in apps/jobs/views.py). */}

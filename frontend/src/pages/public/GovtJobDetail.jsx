@@ -8,6 +8,7 @@
  * in ProtectedRoute (App.jsx) because the API requires login.
  */
 import { useEffect, useState } from 'react'
+import { useListingPrefix } from '@/hooks/useDashboardBase'
 import { useParams, Link } from 'react-router-dom'
 import { govtJobService } from '@/services/govtJobService'
 import { Spinner } from '@/components/ui/Spinner'
@@ -71,6 +72,8 @@ const CATEGORIES = {
  */
 export default function GovtJobDetail() {
   const { id } = useParams() // govt job id from the /govt-jobs/:id route
+  // '/seeker' when opened inside the dashboard, so "Back" returns to the dashboard list.
+  const prefix = useListingPrefix()
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -84,7 +87,7 @@ export default function GovtJobDetail() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Link to="/govt-jobs" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6">
+      <Link to={`${prefix}/govt-jobs`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6">
         <ArrowLeft className="h-4 w-4" /> Back to Govt Jobs
       </Link>
 

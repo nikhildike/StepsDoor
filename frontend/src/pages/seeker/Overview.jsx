@@ -13,10 +13,12 @@
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bookmark, Bell, Briefcase, ExternalLink, FileText, MapPin, Clock } from 'lucide-react'
+import { Bookmark, Bell, Briefcase, ExternalLink, FileText, MapPin, Clock, Landmark } from 'lucide-react'
 import { seekerService } from '@/services/seekerService'
 import { jobService } from '@/services/jobService'
 import { tenderService } from '@/services/tenderService'
+import { govtJobService } from '@/services/govtJobService'
+import { deadlineInfo, DEADLINE_BADGE } from '@/utils/deadline'
 import { useAuthStore } from '@/store/authStore'
 import { formatDate } from '@/utils/formatDate'
 
@@ -97,7 +99,7 @@ function ContractorDashboard({ name, tenders, tenderAlerts }) {
                     )}
                   </p>
                 </div>
-                <Link to={`/tenders/${tender.id}`} className="text-xs text-primary hover:underline shrink-0">
+                <Link to={`/seeker/tenders/${tender.id}`} className="text-xs text-primary hover:underline shrink-0">
                   View →
                 </Link>
               </div>
@@ -144,7 +146,7 @@ function ContractorDashboard({ name, tenders, tenderAlerts }) {
  *
  * @param {{ name: string, savedJobs: Array, alerts: Array, recentJobs: Array }} props
  */
-function SeekerDashboard({ name, savedJobs, alerts, recentJobs }) {
+function SeekerDashboard({ name, savedJobs, alerts, recentJobs, govtJobs }) {
   return (
     <div className="space-y-8">
       <div>
@@ -206,6 +208,36 @@ function SeekerDashboard({ name, savedJobs, alerts, recentJobs }) {
         </div>
       )}
 
+      {/* Govt jobs closing soon — the dates students most need to act on */}
+      <div className="bg-white rounded-xl border border-border">
+        <div className="p-5 border-b flex items-center justify-between">
+          <h2 className="font-semibold flex items-center gap-2"><Landmark className="h-4 w-4 text-primary" /> Govt jobs closing soon</h2>
+          <Link to="/seeker/govt-jobs" className="text-sm text-primary hover:underline">Browse all</Link>
+        </div>
+        {govtJobs.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">No government openings with an upcoming deadline right now.</div>
+        ) : (
+          <div className="divide-y">
+            {govtJobs.map(job => {
+              const deadline = deadlineInfo(job.application_deadline)
+              return (
+                <Link key={job.id} to={`/seeker/govt-jobs/${job.id}`} className="px-5 py-4 flex items-center justify-between gap-4 hover:bg-gray-50">
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm line-clamp-1">{job.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                      {job.organisation}{job.vacancy_count ? ` · ${job.vacancy_count.toLocaleString('en-IN')} vacancies` : ''}
+                    </p>
+                  </div>
+                  {deadline && (
+                    <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${DEADLINE_BADGE[deadline.urgency]}`}>{deadline.label}</span>
+                  )}
+                </Link>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Latest jobs */}
       <div className="bg-white rounded-xl border border-border">
         <div className="p-5 border-b flex items-center justify-between">
@@ -256,6 +288,7 @@ export default function SeekerOverview() {
   const [savedJobs, setSavedJobs] = useState([])
   const [alerts, setAlerts] = useState([])
   const [recentJobs, setRecentJobs] = useState([])
+  const [govtJobs, setGovtJobs] = useState([]) // open govt jobs with the nearest deadlines (seekers)
   // Contractor-only state.
   const [tenders, setTenders] = useState([])
   const [tenderAlerts, setTenderAlerts] = useState([])
@@ -266,10 +299,12 @@ export default function SeekerOverview() {
     if (isContractor) {
       // Contractors need recent tenders and their tender alerts, not saved
       // jobs or job listings. Profile is still fetched for the greeting name.
+      // Each request fails on its own (empty section) — one failing call used to blank the
+      // whole dashboard (e.g. "0 tenders" while /tenders/alerts/ was 404ing).
       Promise.all([
         seekerService.profile().catch(() => ({ data: null })),
-        tenderService.list({ page_size: 5 }),
-        tenderService.alerts(),
+        tenderService.list({ page_size: 5 }).catch(() => ({ data: [] })),
+        tenderService.alerts().catch(() => ({ data: [] })),
       ]).then(([p, t, ta]) => {
         setProfile(p.data)
         setTenders(t.data.results ?? t.data)
@@ -278,11 +313,12 @@ export default function SeekerOverview() {
     } else {
       // Job seekers: profile, saved jobs, job alerts, and recent job listings.
       // GET /jobseekers/profiles/me/, /jobseekers/saved-jobs/, /alerts/, /jobs/?page_size=5
+      // Each request fails on its own (empty section) rather than blanking the dashboard.
       Promise.all([
-        seekerService.profile(),
-        seekerService.savedJobs(),
-        seekerService.alerts(),
-        jobService.list({ page_size: 5 }),
+        seekerService.profile().catch(() => ({ data: null })),
+        seekerService.savedJobs().catch(() => ({ data: [] })),
+        seekerService.alerts().catch(() => ({ data: [] })),
+        jobService.list({ page_size: 5 }).catch(() => ({ data: [] })),
       ]).then(([p, s, a, j]) => {
         setProfile(p.data)
         setSavedJobs(s.data.results ?? s.data)
@@ -290,6 +326,16 @@ export default function SeekerOverview() {
         setRecentJobs(j.data.results ?? j.data)
       }).finally(() => setLoading(false))
     }
+  }, [isContractor])
+
+  // Job seekers: govt openings closing soonest. Fetched on its own (and allowed to fail)
+  // so it can never blank the rest of the dashboard. Jobs without a stated deadline are
+  // skipped (SQLite sorts null deadlines first).
+  useEffect(() => {
+    if (isContractor) return
+    govtJobService.list({ ordering: 'application_deadline', page_size: 20 })
+      .then(({ data }) => setGovtJobs((data.results ?? data).filter(j => j.application_deadline).slice(0, 5)))
+      .catch(() => setGovtJobs([]))
   }, [isContractor])
 
   // Builds the display name for the welcome header.
@@ -304,6 +350,6 @@ export default function SeekerOverview() {
   return isContractor ? (
     <ContractorDashboard name={name} tenders={tenders} tenderAlerts={tenderAlerts} />
   ) : (
-    <SeekerDashboard name={name} savedJobs={savedJobs} alerts={alerts} recentJobs={recentJobs} />
+    <SeekerDashboard name={name} savedJobs={savedJobs} alerts={alerts} recentJobs={recentJobs} govtJobs={govtJobs} />
   )
 }

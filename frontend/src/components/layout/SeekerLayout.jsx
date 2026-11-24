@@ -16,7 +16,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
-import { LayoutDashboard, Bookmark, Bell, User, LogOut, Menu, X, FileText, ShoppingBag, Store, Wrench, PlusCircle, Briefcase } from 'lucide-react'
+import { LayoutDashboard, Bookmark, Bell, User, LogOut, Menu, X, FileText, ShoppingBag, Store, Wrench, PlusCircle, Briefcase, Landmark } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
 // Browse links shown to job seekers and contractors. They point at /seeker/* copies
@@ -31,6 +31,7 @@ const BROWSE_NAV = [
 // Nav items shown to job seekers.
 const SEEKER_NAV = [
   { to: '/seeker',         label: 'Dashboard',     icon: LayoutDashboard, end: true },
+  { to: '/seeker/govt-jobs', label: 'Govt Jobs',   icon: Landmark },
   { to: '/seeker/saved',   label: 'Saved Jobs',    icon: Bookmark },
   { to: '/seeker/alerts',  label: 'Job Alerts',    icon: Bell },
   { to: '/seeker/profile', label: 'My Profile',    icon: User },

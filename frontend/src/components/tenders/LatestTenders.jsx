@@ -21,6 +21,8 @@ import { MembersOnly } from '@/components/ui/MembersOnly'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Spinner } from '@/components/ui/Spinner'
 import { formatDate } from '@/utils/formatDate'
+import { deadlineInfo, DEADLINE_BADGE } from '@/utils/deadline'
+import { useListingPrefix } from '@/hooks/useDashboardBase'
 
 // Mirrors backend apps.tenders.models.TenderCategory.
 const CATEGORIES = [
@@ -52,25 +54,34 @@ function formatINR(amount) {
 }
 
 /**
- * One tender row: title links to /tenders/:id; organisation, state/district,
- * category, value and closing date underneath.
+ * One tender row: title links to /tenders/:id (or /seeker/tenders/:id in the dashboard,
+ * via `prefix`), a closing-date badge, then organisation, location, value, bid
+ * opening date and category.
  */
-function TenderRow({ tender }) {
+function TenderRow({ tender, prefix }) {
   const value = formatINR(tender.estimated_value)
+  const deadline = deadlineInfo(tender.submission_deadline)
   return (
     <Link
-      to={`/tenders/${tender.id}`}
+      to={`${prefix}/tenders/${tender.id}`}
       className="block rounded-lg border border-border bg-white p-4 transition-shadow hover:shadow-sm"
     >
-      <p className="text-sm font-medium text-foreground line-clamp-2">{tender.title}</p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm font-medium text-foreground line-clamp-2">{tender.title}</p>
+        {deadline && (
+          <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${DEADLINE_BADGE[deadline.urgency]}`}>
+            {deadline.label}
+          </span>
+        )}
+      </div>
       <p className="mt-1 text-xs text-muted-foreground line-clamp-1">{tender.organisation}</p>
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <span className="flex items-center gap-1">
           <MapPin className="h-3 w-3" />{[tender.district, tender.state].filter(Boolean).join(', ')}
         </span>
         {value && <span className="flex items-center gap-1"><IndianRupee className="h-3 w-3" />{value.replace('₹', '')}</span>}
-        {tender.submission_deadline && (
-          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Closes {formatDate(tender.submission_deadline)}</span>
+        {tender.opening_date && (
+          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Bids open {formatDate(tender.opening_date)}</span>
         )}
         {CATEGORY_LABEL[tender.category] && (
           <span className="rounded bg-muted px-1.5 py-0.5">{CATEGORY_LABEL[tender.category]}</span>
@@ -88,6 +99,7 @@ function TenderRow({ tender }) {
  */
 export function LatestTenders() {
   const { token } = useAuthStore()
+  const prefix = useListingPrefix() // '/seeker' inside the dashboard, so detail links stay in it
   const [searchParams, setSearchParams] = useSearchParams()
   const urlSearch = searchParams.get('search') || '' // keyword from the URL (?search=...)
   const [searchInput, setSearchInput] = useState(urlSearch) // what's typed; applied after a pause
@@ -177,7 +189,7 @@ export function LatestTenders() {
         <>
           <p className="mb-3 text-xs text-muted-foreground">{total.toLocaleString('en-IN')} open tender{total === 1 ? '' : 's'}</p>
           <div className={`space-y-3 ${loading ? 'opacity-60' : ''}`}>
-            {result.results.map(t => <TenderRow key={t.id} tender={t} />)}
+            {result.results.map(t => <TenderRow key={t.id} tender={t} prefix={prefix} />)}
           </div>
           {pages > 1 && (
             <div className="mt-6 flex items-center justify-center gap-3 text-sm">

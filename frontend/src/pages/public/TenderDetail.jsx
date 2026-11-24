@@ -8,6 +8,7 @@
  * because the API serves scraped tenders to logged-in users only.
  */
 import { useEffect, useState } from 'react'
+import { useListingPrefix } from '@/hooks/useDashboardBase'
 import { useParams, Link } from 'react-router-dom'
 import { tenderService } from '@/services/tenderService'
 import { Spinner } from '@/components/ui/Spinner'
@@ -83,6 +84,8 @@ function CopyBtn({ text, label }) {
  */
 export default function TenderDetail() {
   const { id } = useParams() // tender id from the /tenders/:id route
+  // '/seeker' when opened inside the dashboard, so "Back" returns to the dashboard list.
+  const prefix = useListingPrefix()
   const [tender, setTender] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -97,7 +100,7 @@ export default function TenderDetail() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Link to="/tenders" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6">
+      <Link to={`${prefix}/tenders`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-6">
         <ArrowLeft className="h-4 w-4" /> Back to Tenders
       </Link>
 

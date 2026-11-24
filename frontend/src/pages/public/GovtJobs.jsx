@@ -1,16 +1,21 @@
 /**
  * GovtJobs.jsx
  *
- * Public directory page mounted at `/govt-jobs` (see App.jsx). NOTE: this is
- * distinct from the scraped GovtJob listings shown via GovtJobDetail.jsx —
- * this page is a static, curated directory of official recruitment portal
- * links, split into Central Government bodies (CENTRAL_BODIES) and
+ * Government jobs page mounted at `/govt-jobs` and, in the job seeker
+ * dashboard, `/seeker/govt-jobs` (see App.jsx). Two views, switched by tabs:
+ *   - "Latest openings" — scraped openings from the recruiter spiders
+ *     (components/govtjobs/LatestGovtJobs.jsx); members only, guests see a
+ *     sign-in prompt. The default for signed-in users.
+ *   - "Official portals" — the static, public, curated directory of official
+ *     recruitment portal links, split into Central Government bodies (CENTRAL_BODIES) and
  * State/UT departments (STATE_DEPARTMENTS), each card linking straight to
  * the official site (UPSC, SSC, state PSCs, police boards, etc.). Supports
  * central-category filtering, multi-select state checkboxes, and a search
  * that spans both sections regardless of the current sidebar selection.
  */
 import { useState } from 'react'
+import { LatestGovtJobs } from '@/components/govtjobs/LatestGovtJobs'
+import { useAuthStore } from '@/store/authStore'
 import { ExternalLink, Building2, MapPin, ChevronDown, ChevronRight, Search } from 'lucide-react'
 
 // Central Government recruitment bodies (UPSC, SSC, banking, railway,
@@ -436,6 +441,10 @@ export const ALL_STATE_DEPTS = Object.entries(STATE_DEPARTMENTS).flatMap(([state
  * state checklist), and the resulting grid of portal link cards.
  */
 export default function GovtJobs() {
+  const { token } = useAuthStore()
+  // Which view is shown: 'latest' (scraped openings, members) or 'portals' (static directory).
+  // Members start on the openings; guests on the public directory.
+  const [view, setView] = useState(token ? 'latest' : 'portals')
   const [section, setSection] = useState('all')   // which top-level section is shown: 'all' | 'central' | 'state'
   const [filter, setFilter] = useState('all')      // active Central Government category filter
   const [selectedStates, setSelectedStates] = useState([])  // empty = All states shown as an overview grid; non-empty = only these states' departments
@@ -511,10 +520,34 @@ export default function GovtJobs() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground mb-1">Government Jobs</h1>
         <p className="text-muted-foreground text-sm">
-          Official recruitment portals for central government bodies, PSUs, ports, and all state/UT recruitment boards.
-          Click any card to go directly to the official site.
+          {view === 'latest'
+            ? 'Open recruitments from UPSC, SSC, IBPS, the Railway Recruitment Boards and more, updated every few hours.'
+            : 'Official recruitment portals for central government bodies, PSUs, ports, and all state/UT recruitment boards. Click any card to go directly to the official site.'}
         </p>
       </div>
+
+      {/* View tabs: scraped openings vs. the static recruitment-portal directory */}
+      <div className="mb-6 inline-flex rounded-lg border border-border bg-muted/40 p-1 text-sm" role="tablist">
+        {[
+          { key: 'latest', label: 'Latest openings' },
+          { key: 'portals', label: 'Official portals' },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={view === tab.key}
+            onClick={() => setView(tab.key)}
+            className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+              view === tab.key ? 'bg-white text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'latest' ? <LatestGovtJobs /> : (<>
 
       {/* Search — spans every section/state, ignoring the current sidebar selection */}
       <div className="mb-6 relative max-w-sm">
@@ -823,6 +856,8 @@ export default function GovtJobs() {
       </div>
       </>
       )}
+
+      </>)}
 
       <p className="mt-10 text-xs text-muted-foreground text-center border-t pt-6">
         StepsDoor links directly to official government recruitment portals. We are not affiliated with any government body.
