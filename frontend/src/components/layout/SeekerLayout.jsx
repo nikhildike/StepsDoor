@@ -5,15 +5,15 @@
  * seekers and contractors; the sidebar nav items and role label adapt to the
  * signed-in user's role:
  *
- *   Job seeker:  Dashboard · Saved Jobs  · Job Alerts    · My Profile
- *   Contractor:  Dashboard · Tenders     · Tender Alerts · My Profile
+ *   Job seeker:  Dashboard · Govt Jobs · Saved Jobs · Alerts · My Profile
+ *   Contractor:  Dashboard · Tenders · Tender Alerts · Post a Job · My Jobs · My Profile
+ *   (plus Shopping / Retail Stores / Services for both)
  *
- * The sidebar starts open on page load and auto-collapses after 5 seconds.
- * A burger button in the persistent top bar re-opens it (and resets the
- * 5-second timer) at any time. The sidebar overlays content rather than
- * pushing it so the main area always uses the full viewport width.
+ * From the md breakpoint (768px) up the sidebar is always open beside the
+ * content, like the company and store dashboards; on phones it's a drawer
+ * behind the burger button in the top bar.
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { LayoutDashboard, Bookmark, Bell, User, LogOut, Menu, X, FileText, ShoppingBag, Store, Wrench, PlusCircle, Briefcase, Landmark } from 'lucide-react'
@@ -124,88 +124,62 @@ function SidebarContent({ user, signOut, onClose, navItems }) {
 /**
  * SeekerLayout
  *
- * Layout route for /seeker/* pages. Renders a persistent top bar (burger
- * button + branding) and a slide-over sidebar that:
- *   - Opens on mount
- *   - Auto-collapses after 5 seconds
- *   - Can be re-opened (or closed) at any time via the burger button
- *   - Closes immediately on route change (nav link click)
- *
- * The sidebar overlays the content area (does not push it), so the main
- * content always occupies the full width.
+ * Layout route for /seeker/* pages (job seekers and contractors). A top bar
+ * (branding + role) sits above a sidebar and the page content:
+ *   - Desktop/tablet (md, 768px+): the sidebar is always open, as a column
+ *     beside the content — the same as the company (DashboardLayout) and store
+ *     (StoreLayout) dashboards.
+ *   - Phones: the sidebar is a slide-over drawer opened by the burger button;
+ *     it closes on navigation (route change) or a tap on the backdrop.
  *
  * Props: none — reads auth state from useAuth and current route from useLocation.
  */
 export default function SeekerLayout() {
   const { user, signOut } = useAuth()
   const location = useLocation()
-  // Sidebar starts open so users immediately see the nav on first load.
-  const [open, setOpen] = useState(true)
-  // Ref holds the auto-collapse timer so it can be cleared on re-open.
-  const timerRef = useRef(null)
+  // Phone drawer open/closed. Has no effect at md+ where the sidebar is always shown.
+  const [open, setOpen] = useState(false)
 
   const isContractor = !!user?.is_contractor
   const navItems = isContractor ? CONTRACTOR_NAV : SEEKER_NAV
   const roleLabel = isContractor ? 'Contractor' : 'Job Seeker'
 
-  // Whenever the sidebar opens, start (or restart) the 5-second auto-collapse timer.
-  useEffect(() => {
-    clearTimeout(timerRef.current)
-    if (open) {
-      timerRef.current = setTimeout(() => setOpen(false), 5000)
-    }
-    return () => clearTimeout(timerRef.current)
-  }, [open])
-
-  // Collapse immediately on route change (user tapped a nav link).
+  // Close the phone drawer after navigating (the user tapped a nav link).
   useEffect(() => { setOpen(false) }, [location.pathname])
-
-  // Toggle handler: flipping open will trigger the useEffect above to
-  // restart the 5-second timer.
-  const toggleSidebar = () => setOpen(o => !o)
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
 
-      {/* Persistent top bar — visible at all screen sizes */}
+      {/* Top bar — all screen sizes; the burger is phone-only */}
       <header className="flex items-center px-4 h-14 bg-white border-b shrink-0 z-30">
-        {/* Burger button: opens the sidebar and resets the 5-second timer */}
         <button
-          onClick={toggleSidebar}
-          className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          onClick={() => setOpen(o => !o)}
+          className="md:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           aria-label={open ? 'Close menu' : 'Open menu'}
         >
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
-        <div className="ml-3">
+        <div className="ml-3 md:ml-0">
           <span className="text-lg font-bold text-primary">StepsDoor</span>
           <span className="ml-2 text-xs text-muted-foreground">{roleLabel}</span>
         </div>
       </header>
 
-      {/* Body: sidebar overlay + main content */}
       <div className="relative flex flex-1 min-h-0">
 
-        {/* Backdrop — dims the content area while the sidebar is open;
-            clicking it collapses the sidebar immediately */}
+        {/* Phone-only backdrop while the drawer is open; tapping it closes the drawer */}
         {open && (
-          <div
-            className="fixed inset-0 z-20 bg-black/30 top-14"
-            onClick={() => setOpen(false)}
-          />
+          <div className="fixed inset-0 z-20 bg-black/30 top-14 md:hidden" onClick={() => setOpen(false)} />
         )}
 
-        {/* Slide-over sidebar — translates in from the left when open */}
+        {/* Sidebar — a fixed slide-over drawer on phones, an always-visible column from md up */}
         <aside
           className={cn(
-            'fixed top-14 left-0 bottom-0 z-30 w-64 bg-white border-r flex flex-col shadow-xl transition-transform duration-200',
+            'fixed top-14 left-0 bottom-0 z-30 w-64 bg-white border-r flex flex-col shadow-xl transition-transform duration-200 overflow-y-auto',
+            'md:static md:z-auto md:translate-x-0 md:shadow-none md:shrink-0',
             open ? 'translate-x-0' : '-translate-x-full'
           )}
         >
-          <div className="p-5 border-b">
-            <span className="text-base font-bold text-primary">StepsDoor</span>
-            <p className="text-xs text-muted-foreground mt-0.5">{roleLabel}</p>
-          </div>
           <SidebarContent
             user={user}
             signOut={signOut}
@@ -214,8 +188,7 @@ export default function SeekerLayout() {
           />
         </aside>
 
-        {/* Main content — always full width since sidebar overlays */}
-        <main className="flex-1 overflow-auto p-4 md:p-8">
+        <main className="flex-1 min-w-0 overflow-auto p-4 md:p-8">
           <Outlet />
         </main>
       </div>
