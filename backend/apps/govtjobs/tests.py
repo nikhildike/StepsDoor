@@ -11,7 +11,7 @@ from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 from scrapy.http import HtmlResponse, TextResponse
 
 from scrapers.pipelines import _parse_dt
@@ -170,3 +170,28 @@ class UpscSpiderTests(SimpleTestCase):
             'https://www.upsc.gov.in/uploads/2026/11/AdvtNo-13-2026-Engl-131126_0.pdf',
         )
         self.assertEqual(_parse_dt(advt['published_at']).date().isoformat(), '2026-11-13')
+
+
+class GovtJobAlertApiTests(TestCase):
+    """The web Alerts page's govt job alert calls: create, pause (PATCH), delete — own alerts only."""
+
+    def test_owner_can_pause_and_delete_and_others_cannot(self):
+        from rest_framework.test import APIClient
+        from apps.authentication.models import User
+        from apps.govtjobs.models import GovtJobAlert
+        seeker = User.objects.create_user(username='ravi', email='r@example.com', password='x', is_job_seeker=True)
+        other = User.objects.create_user(username='mira', email='m@example.com', password='x', is_job_seeker=True)
+        api = APIClient()
+        api.force_authenticate(seeker)
+        alert_id = api.post('/api/govtjobs/alerts/', {'keyword': 'clerk', 'state': 'Kerala', 'category': 'state_govt'},
+                            format='json').data['id']
+
+        api.force_authenticate(other)
+        self.assertEqual(api.patch(f'/api/govtjobs/alerts/{alert_id}/', {'is_active': False}, format='json').status_code, 404)
+        self.assertEqual(api.delete(f'/api/govtjobs/alerts/{alert_id}/').status_code, 404)
+
+        api.force_authenticate(seeker)
+        self.assertEqual(api.patch(f'/api/govtjobs/alerts/{alert_id}/', {'is_active': False}, format='json').status_code, 200)
+        self.assertFalse(GovtJobAlert.objects.get(pk=alert_id).is_active)
+        self.assertEqual(api.delete(f'/api/govtjobs/alerts/{alert_id}/').status_code, 204)
+        self.assertFalse(GovtJobAlert.objects.exists())

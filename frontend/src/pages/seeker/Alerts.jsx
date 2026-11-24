@@ -12,6 +12,7 @@
  * scraped tenders.
  */
 import { useEffect, useState } from 'react'
+import { GovtJobAlertPanel } from '@/components/govtjobs/GovtJobAlertPanel'
 import { Bell, Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { seekerService } from '@/services/seekerService'
@@ -266,8 +267,9 @@ function JobAlertPanel({ alerts, onCreate, onToggle, onDelete, showForm, setShow
 
 /**
  * Page entry point: reads the user's role from the auth store and renders
- * either `TenderAlertPanel` (contractor) or `JobAlertPanel` (job seeker),
- * fetching only the alert type relevant to the current role.
+ * either `TenderAlertPanel` (contractor) or, for job seekers, `JobAlertPanel`
+ * (private jobs) followed by `GovtJobAlertPanel` (government jobs, which loads
+ * its own alerts).
  */
 export default function Alerts() {
   const { user } = useAuthStore()
@@ -334,5 +336,10 @@ export default function Alerts() {
 
   return isContractor
     ? <TenderAlertPanel {...panelProps} />
-    : <JobAlertPanel {...panelProps} />
+    : (
+      <div className="space-y-10">
+        <JobAlertPanel {...panelProps} />
+        <GovtJobAlertPanel />
+      </div>
+    )
 }

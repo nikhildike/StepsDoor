@@ -57,6 +57,14 @@ export const govtJobService = {
   createAlert: (data) => api.post('/govtjobs/alerts/', data),
 
   /**
+   * Partially update one of the current user's govt job alerts (e.g. pause/resume).
+   * Endpoint: PATCH /govtjobs/alerts/{id}/
+   * @param {number} id - Alert ID.
+   * @param {Object} data - Fields to change, e.g. { is_active: false }.
+   */
+  updateAlert: (id, data) => api.patch(`/govtjobs/alerts/${id}/`, data),
+
+  /**
    * Deletes a govt job alert.
    *
    * Endpoint: DELETE /govtjobs/alerts/{id}/

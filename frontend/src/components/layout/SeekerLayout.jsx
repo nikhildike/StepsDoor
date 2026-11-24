@@ -33,7 +33,7 @@ const SEEKER_NAV = [
   { to: '/seeker',         label: 'Dashboard',     icon: LayoutDashboard, end: true },
   { to: '/seeker/govt-jobs', label: 'Govt Jobs',   icon: Landmark },
   { to: '/seeker/saved',   label: 'Saved Jobs',    icon: Bookmark },
-  { to: '/seeker/alerts',  label: 'Job Alerts',    icon: Bell },
+  { to: '/seeker/alerts',  label: 'Alerts',        icon: Bell }, // job + government job alerts
   { to: '/seeker/profile', label: 'My Profile',    icon: User },
 ]
 
