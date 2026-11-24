@@ -19,11 +19,13 @@ import { useAuth } from '@/hooks/useAuth'
 import { LayoutDashboard, Bookmark, Bell, User, LogOut, Menu, X, FileText, ShoppingBag, Store, Wrench } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
-// Browse links shown to all roles — public pages accessible from any account type.
+// Browse links shown to job seekers and contractors. They point at /seeker/* copies
+// of the public pages (see App.jsx) so the sidebar stays visible — linking to the
+// public /shopping etc. used to drop the user out of their dashboard.
 const BROWSE_NAV = [
-  { to: '/shopping',      label: 'Shopping',      icon: ShoppingBag },
-  { to: '/retail-stores', label: 'Retail Stores', icon: Store },
-  { to: '/services',      label: 'Services',      icon: Wrench },
+  { to: '/seeker/shopping',      label: 'Shopping',      icon: ShoppingBag },
+  { to: '/seeker/retail-stores', label: 'Retail Stores', icon: Store },
+  { to: '/seeker/services',      label: 'Services',      icon: Wrench },
 ]
 
 // Nav items shown to job seekers.

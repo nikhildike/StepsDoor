@@ -12,11 +12,13 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
+from core.mixins import PublicActionsAuthMixin
+
 from .models import FreelancerProfile, FreelancerReview
 from .serializers import FreelancerListSerializer, FreelancerDetailSerializer, FreelancerReviewSerializer
 
 
-class FreelancerProfileViewSet(viewsets.ModelViewSet):
+class FreelancerProfileViewSet(PublicActionsAuthMixin, viewsets.ModelViewSet):
     """CRUD + browse/search API for freelancer profiles.
 
     `list`/`retrieve` are public and only ever return active profiles; the
@@ -55,12 +57,9 @@ class FreelancerProfileViewSet(viewsets.ModelViewSet):
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated()]
 
-    def get_authenticators(self):
-        """Skip running authenticators on public list/retrieve requests so
-        anonymous browsing never triggers unnecessary auth/token checks."""
-        if self.action in ['list', 'retrieve']:
-            return []
-        return super().get_authenticators()
+    # No authentication on public browsing (PublicActionsAuthMixin), so anonymous
+    # requests never trigger unnecessary auth/token checks.
+    public_actions = ('list', 'retrieve')
 
     def perform_create(self, serializer):
         """Attach the requesting user as the owner when a profile is created."""

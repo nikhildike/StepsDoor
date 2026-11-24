@@ -13,13 +13,15 @@ router = SimpleRouter()
 # GET  /            -> list active tenders (filterable/searchable/orderable, auth required)
 # GET  /<id>/       -> retrieve a single tender's full detail (auth required)
 # GET  /states/     -> custom action: states with at least one active tender + counts (auth required)
-router.register(r'', TenderViewSet, basename='tender')
+# Registered FIRST: the '' viewset's detail route (<pk>/) would otherwise match
+# 'alerts/' and answer 404 ("tender/govt job with id 'alerts'").
 # GET    /alerts/          -> list the current user's saved tender alerts (auth required)
 # POST   /alerts/          -> create a new tender alert for the current user (auth required)
 # GET    /alerts/<id>/     -> retrieve one of the current user's alerts (auth required)
 # PUT/PATCH /alerts/<id>/  -> update one of the current user's alerts (auth required)
 # DELETE /alerts/<id>/     -> delete one of the current user's alerts (auth required)
 router.register(r'alerts', TenderAlertViewSet, basename='tender-alert')
+router.register(r'', TenderViewSet, basename='tender')
 
 urlpatterns = [
     path('', include(router.urls)),

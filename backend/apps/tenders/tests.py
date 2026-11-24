@@ -484,3 +484,40 @@ class SendGridEmailTests(TestCase):
         with mock.patch('requests.Session.request', return_value=self.sendgrid_response(401)):
             with self.assertRaises(AnymailAPIError):
                 send_mail('s', 'b', None, ['ops@example.com'])
+
+
+class RoutingRegressionTests(TestCase):
+    """
+    Endpoints that were broken in the routing/auth layer, never reaching their views:
+      - /api/tenders/alerts/ and /api/govtjobs/alerts/ answered 404 because the listing
+        viewset's <pk>/ route (registered first) swallowed 'alerts/';
+      - /api/jobs/ and /api/freelancers/ 500'd on DRF 3.18.3 (get_authenticators read
+        self.action before DRF sets it) — now via core.mixins.PublicActionsAuthMixin.
+    """
+
+    def setUp(self):
+        """A contractor account and an API client."""
+        from rest_framework.test import APIClient
+        from apps.authentication.models import User
+        self.user = User.objects.create_user(username='firm', email='f@example.com', password='x', is_contractor=True)
+        self.api = APIClient()
+
+    def test_alert_endpoints_list_and_create(self):
+        """Signed-in users can list and create tender and govt job alerts."""
+        self.api.force_authenticate(self.user)
+        for url, body in (('/api/tenders/alerts/', {'keyword': 'road', 'state': 'Haryana'}),
+                          ('/api/govtjobs/alerts/', {'keyword': 'clerk'})):
+            with self.subTest(url=url):
+                self.assertEqual(self.api.get(url).status_code, 200)
+                self.assertEqual(self.api.post(url, body, format='json').status_code, 201)
+        self.assertEqual(self.user.tender_alerts.count(), 1)
+        self.assertEqual(self.user.govtjob_alerts.count(), 1)
+
+    def test_public_lists_work_anonymously_and_ignore_stale_tokens(self):
+        """Job and freelancer browsing works logged out, even with an expired/garbage token attached."""
+        for url in ('/api/jobs/', '/api/freelancers/'):
+            with self.subTest(url=url):
+                self.assertEqual(self.api.get(url).status_code, 200)
+                self.api.credentials(HTTP_AUTHORIZATION='Bearer not-a-valid-token')
+                self.assertEqual(self.api.get(url).status_code, 200)
+                self.api.credentials()

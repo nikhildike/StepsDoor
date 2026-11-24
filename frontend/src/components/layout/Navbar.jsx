@@ -44,6 +44,10 @@ export default function Navbar() {
   // Role flags derived from the signed-in user (all false/undefined for anonymous visitors)
   const isSeeker  = token && user && !user.is_company && !user.is_store_owner
   const isCompany = token && user?.is_company
+  // Where "Dashboard" goes for each signed-in role. Every role needs it: without it,
+  // a job seeker or contractor who opens a public page (Services, Tenders...) had no
+  // way back to their dashboard menu. Store owners are also is_company, so check them first.
+  const dashboardTo = user?.is_store_owner ? '/store' : user?.is_company ? '/dashboard' : '/seeker'
 
   // Hide company-only links (Pricing) from seekers and store owners
   const links = NAV_LINKS.filter(l => !(l.companyOnly && (isSeeker || (token && user?.is_store_owner))))
@@ -67,7 +71,7 @@ export default function Navbar() {
           {/* Auth actions: role-aware shortcuts + sign out when authenticated, sign in / post-a-job CTA otherwise */}
           {token ? (
             <>
-              {isCompany && <Link to="/dashboard" className="text-sm font-medium text-primary hover:underline">Dashboard</Link>}
+              <Link to={dashboardTo} className="text-sm font-medium text-primary hover:underline">Dashboard</Link>
               <button onClick={signOut} className="text-sm text-muted-foreground hover:text-foreground">Sign out</button>
             </>
           ) : (

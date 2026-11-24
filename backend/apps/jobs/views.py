@@ -13,11 +13,13 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
+from core.mixins import PublicActionsAuthMixin
+
 from .models import JobPost
 from .serializers import JobPostSerializer
 
 
-class JobPostViewSet(viewsets.ModelViewSet):
+class JobPostViewSet(PublicActionsAuthMixin, viewsets.ModelViewSet):
     """CRUD + browsing endpoints for `JobPost`.
 
     Anonymous job seekers use `list`/`retrieve`/`track_click` to
@@ -32,17 +34,10 @@ class JobPostViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'salary_min', 'salary_max', 'clicks']
     ordering = ['-created_at']
 
-    def get_authenticators(self):
-        """Skip JWT authentication entirely for public actions.
-
-        Called by DRF before permission checks on every request. For
-        list/retrieve/track_click we don't want a bad/expired Authorization
-        header on an anonymous request to raise an auth error, since
-        job browsing and applying must work for logged-out visitors.
-        """
-        if self.action in ['list', 'retrieve', 'track_click']:
-            return []
-        return super().get_authenticators()
+    # No JWT authentication on these (PublicActionsAuthMixin): a bad/expired
+    # Authorization header on an anonymous request mustn't raise an auth error,
+    # since job browsing and applying must work for logged-out visitors.
+    public_actions = ('list', 'retrieve', 'track_click')
 
     def get_permissions(self):
         """Allow anonymous access to browsing/click actions; require auth otherwise.

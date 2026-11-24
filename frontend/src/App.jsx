@@ -202,6 +202,11 @@ export default function App() {
         {/* Tender listings rendered inside the seeker layout so contractors keep
             the sidebar visible when browsing tenders from their dashboard. */}
         <Route path="tenders" element={<Tenders />} />
+        {/* Browse pages linked from the dashboard sidebar, rendered inside the seeker
+            layout too so the dashboard menu stays visible (public versions above). */}
+        <Route path="services" element={<Services />} />
+        <Route path="shopping" element={<Shopping />} />
+        <Route path="retail-stores" element={<RetailStores />} />
       </Route>
 
       {/* Store owner routes — guarded by ProtectedRoute requireStore
