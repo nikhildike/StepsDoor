@@ -1,0 +1,38 @@
+{% comment %}
+HTML alert digest, rendered by apps.notifications.alert_emails._send_digest (the .txt is the plain-text part).
+Context: name, label, noun, count, items (title/url/details), more, manage_url, site_url.
+Inline styles and a single table layout because many email clients strip <style> blocks.
+{% endcomment %}<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6fa;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa;padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:10px;border:1px solid #e2e8f0;">
+        <tr><td style="padding:20px 24px;border-bottom:1px solid #e2e8f0;">
+          <a href="{{ site_url }}" style="font-size:18px;font-weight:bold;color:#1d4ed8;text-decoration:none;">StepsDoor</a>
+        </td></tr>
+        <tr><td style="padding:20px 24px 8px;">
+          <p style="margin:0 0 8px;font-size:15px;">Hi {{ name }},</p>
+          <p style="margin:0;font-size:15px;">Here {% if count == 1 %}is 1 new match{% else %}are {{ count }} new matches{% endif %} for your {{ label }} alerts:</p>
+        </td></tr>
+        {% for item in items %}
+        <tr><td style="padding:10px 24px;">
+          <a href="{{ item.url }}" style="font-size:15px;font-weight:bold;color:#1d4ed8;text-decoration:none;">{{ item.title }}</a>
+          {% if item.details %}<div style="margin-top:3px;font-size:13px;color:#64748b;">{{ item.details }}</div>{% endif %}
+        </td></tr>
+        {% endfor %}
+        {% if more %}
+        <tr><td style="padding:10px 24px;font-size:14px;">
+          …and {{ more }} more {{ noun }} — <a href="{{ site_url }}" style="color:#1d4ed8;">see them on StepsDoor</a>
+        </td></tr>
+        {% endif %}
+        <tr><td style="padding:16px 24px 20px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b;">
+          You're getting this because you set up alerts on StepsDoor.
+          <a href="{{ manage_url }}" style="color:#64748b;">Manage or pause your alerts</a>.
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

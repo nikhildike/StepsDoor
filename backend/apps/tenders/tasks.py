@@ -4,7 +4,7 @@ Celery tasks for the tenders module.
 Scheduling is managed via django-celery-beat (DatabaseScheduler). The schedule is
 created by `python manage.py setup_scraper_schedule` (see that command for times):
   - scrape_all_portals    → hourly (NIC portals only expose their 10 newest tenders)
-  - match_tender_alerts   → daily (its window is the last 24 hours)
+  - match_tender_alerts   → daily (emails digests of tenders new since each alert was last checked)
   - expire_stale_listings → daily (covers govt jobs too)
   - alert_failing_scrapers → daily (emails SCRAPER_ALERT_EMAILS about broken sources)
 
@@ -72,50 +72,52 @@ def scrape_all_portals(expires_seconds: int = 3000):
 @shared_task
 def match_tender_alerts():
     """
-    Match tenders published in the last 24 hours against active TenderAlerts.
-    Queues push/email notifications for matching users.
+    Email each user a digest of new tenders matching their active TenderAlerts.
 
-    Intended to run on Celery Beat's every-6-hours schedule, right after
-    `scrape_all_portals`, so newly scraped tenders get matched against alerts promptly.
-    Can also be triggered manually (e.g. from the Django shell) for testing.
+    Runs daily via Celery Beat (`setup_scraper_schedule`). Each alert is matched
+    against active tenders created since its `last_checked_at`; delivery, per-user
+    grouping and retry-on-failure are handled by
+    `apps.notifications.alert_emails.send_alert_digests`. Returns its counts dict.
     """
-    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+    from django.conf import settings
     from django.db.models import Q
+    from apps.notifications.alert_emails import AlertKind, DigestItem, inr, send_alert_digests
     from apps.tenders.models import Tender, TenderAlert
+    IST = ZoneInfo('Asia/Kolkata')  # portals' deadlines are IST; show them as such
 
-    # 24h window: matches the every-6-hours Beat cadence with margin, so a tender scraped in
-    # any of the last few runs still gets picked up even if match_tender_alerts is delayed.
-    since = timezone.now() - timedelta(hours=24)
-    new_tenders = Tender.objects.filter(created_at__gte=since, is_active=True)
-
-    if not new_tenders.exists():
-        # Nothing new — skip the (potentially large) alert loop entirely.
-        return
-
-    alerts = TenderAlert.objects.filter(is_active=True).select_related('user')
-    matched = 0
-
-    for alert in alerts:
-        filters = Q()
+    def match(alert, since):
+        """Active tenders created after `since` that pass every filter the alert sets."""
+        qs = Tender.objects.filter(is_active=True, created_at__gt=since)
         if alert.keyword:
-            filters &= Q(title__icontains=alert.keyword) | Q(organisation__icontains=alert.keyword)
+            qs = qs.filter(Q(title__icontains=alert.keyword) | Q(organisation__icontains=alert.keyword))
         if alert.state:
-            filters &= Q(state=alert.state)
+            qs = qs.filter(state__iexact=alert.state)
         if alert.category:
-            filters &= Q(category=alert.category)
+            qs = qs.filter(category=alert.category)
         if alert.min_value:
-            filters &= Q(estimated_value__gte=alert.min_value)
+            qs = qs.filter(estimated_value__gte=alert.min_value)
+        return qs.order_by('submission_deadline', '-created_at')
 
-        # An alert with no filters set at all matches every new tender (Q() is falsy/empty).
-        matching = new_tenders.filter(filters) if filters else new_tenders
-        count = matching.count()
+    def to_item(tender):
+        """Digest line: title, then organisation · state · value · closing date."""
+        details = [tender.organisation, tender.state]
+        if tender.estimated_value:
+            details.append(inr(tender.estimated_value))
+        if tender.submission_deadline:
+            details.append(f"closes {timezone.localtime(tender.submission_deadline, IST):%d %b %Y}")
+        return DigestItem(
+            title=tender.title,
+            url=f'{settings.FRONTEND_URL}/tenders/{tender.pk}',
+            details=' · '.join(d for d in details if d),
+        )
 
-        if count:
-            matched += count
-            # TODO: Week 10 — call notification service to send email/push
-            logger.info(f"Alert match: {alert.user.email} — {count} new tender(s)")
-
-    logger.info(f"Tender alert matching done. {matched} notifications queued.")
+    counts = send_alert_digests(
+        TenderAlert.objects.filter(is_active=True).select_related('user'),
+        AlertKind(noun='government tenders', label='tender', user_of=lambda a: a.user, match=match, to_item=to_item),
+    )
+    logger.info(f"match_tender_alerts: {counts}")
+    return counts
 
 
 @shared_task

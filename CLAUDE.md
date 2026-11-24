@@ -65,7 +65,7 @@ scrapy crawl mahatenders -s SCRAPY_SETTINGS_MODULE=scrapers.settings
 | `subscriptions` | Plans, active subscription status |
 | `payments` | Razorpay webhooks, invoice PDFs (WeasyPrint) |
 | `analytics` | Click events per job post |
-| `alerts` | Private job alerts (Celery task matches new jobs → email/push) |
+| `alerts` | Private job alerts (`match_job_alerts` emails daily digests of new matching jobs; push not built) |
 | `notifications` | FCM token registration, email via SendGrid |
 | `tenders` | Govt tender listings, TenderAlert, ScraperLog |
 | `govtjobs` | Govt job listings, GovtJobAlert |
@@ -200,9 +200,9 @@ Celery Beat (schedule from `setup_scraper_schedule`, all times IST)
       → TenderPipeline / GovtJobPipeline → update_or_create() on Tender/GovtJob
       → ScraperLogPipeline → final status + counts on ScraperLog, stamps ScraperSource.last_scraped_at
   00:15 daily          → expire_stale_listings  (hides listings past deadline or unseen for LISTING_STALE_DAYS)
-  07:30 / 07:40 daily  → match_tender_alerts / match_govtjob_alerts
-      → listings created in the last 24h matched against alerts (daily, so nothing matches twice);
-        notification dispatch still TODO
+  07:30 / 07:40 / 07:50 daily → match_tender_alerts / match_govtjob_alerts / match_job_alerts
+      → each alert matched against listings created since its last_checked_at; one digest
+        email per user (apps.notifications.alert_emails); push (FCM) not built yet
   09:00 daily          → alert_failing_scrapers (emails SCRAPER_ALERT_EMAILS; see runbook below)
 ```
 
@@ -305,3 +305,5 @@ When making future changes to this repo — new files, new functions, edits to e
 ### Email
 
 Sent with Django's `send_mail` through django-anymail's SendGrid backend in production (`production.py`); development prints mail to the console unless `.env` sets `EMAIL_BACKEND=anymail.backends.sendgrid.EmailBackend`. Production needs `SENDGRID_API_KEY` and a SendGrid-verified sender in `DEFAULT_FROM_EMAIL` (default `StepsDoor <noreply@stepsdoor.in>` — verify that address or authenticate the stepsdoor.in domain in SendGrid, or SendGrid rejects the mail). An empty or wrong key isn't caught up front: SendGrid answers 401 and the task fails with `AnymailAPIError` in the worker log. Tests that touch the SendGrid backend must patch `requests.Session.request` — anymail will make a real HTTP call even with an empty key. `anymail.W003` is silenced in production; see the comment there.
+
+**Alert digest emails** (`apps/notifications/alert_emails.py`, templates `templates/emails/alert_digest.{txt,html}`): `send_alert_digests(alerts, AlertKind(...))` is the shared engine for tender, govt job and private job alerts — each task only supplies the alert queryset, a `match(alert, since)` filter and a `to_item(listing)` formatter. Each alert stores `last_checked_at`; a run matches listings created after it (or after the alert's own creation, so new alerts don't get a backlog), sends one email per user with each listing once, then advances `last_checked_at` to the run's start. A failed send leaves it unchanged, so the next run retries — missed or doubled runs neither lose nor repeat mail. Links use `FRONTEND_URL`; at most `ALERT_EMAIL_MAX_ITEMS` listings per email. Amounts use `inr()` (Indian grouping, ₹12,28,141). Management command output must stay ASCII — Windows consoles (cp1252) crash on characters like `→`/`₹`.

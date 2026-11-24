@@ -70,10 +70,10 @@ class Command(BaseCommand):
             for row in qs.values('source_portal').annotate(n=Count('id')).order_by('-n')[:8]:
                 self.stdout.write(f"    {row['n']:5}  {row['source_portal']}")
             for title in qs.values_list('title', flat=True)[:3]:
-                self.stdout.write(f'    e.g. {title[:80]!r}')
+                self.stdout.write(f'    e.g. {ascii(title[:80])}')  # ascii(): Windows consoles can't print every script
 
         if options['dry_run']:
-            self.stdout.write(self.style.WARNING('Dry run — nothing deleted.'))
+            self.stdout.write(self.style.WARNING('Dry run - nothing deleted.'))
             return
 
         with transaction.atomic():

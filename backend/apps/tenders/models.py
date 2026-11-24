@@ -125,8 +125,8 @@ class TenderAlert(models.Model):
     A saved search that lets a job seeker get notified about new matching tenders.
 
     Created/managed by the user via `TenderAlertViewSet` (their own alerts only). Read by
-    the `match_tender_alerts` Celery task, which runs each alert's filters against tenders
-    created in the last 24 hours and (eventually) dispatches a notification for matches.
+    the daily `match_tender_alerts` Celery task, which runs each alert's filters against tenders
+    created since `last_checked_at` and emails the user a digest of the matches.
     """
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -139,6 +139,7 @@ class TenderAlert(models.Model):
     min_value = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)  # only match tenders with estimated_value >= this; null = no minimum
     is_active = models.BooleanField(default=True)  # lets a user pause an alert without deleting it; match_tender_alerts only considers is_active=True rows
     created_at = models.DateTimeField(auto_now_add=True)  # when the alert was created
+    last_checked_at = models.DateTimeField(null=True, blank=True)  # listings created after this haven't been matched/emailed yet; set by apps.notifications.alert_emails after each run (null = since the alert was created)
 
     def __str__(self):
         """Human-readable summary of the alert's filters, for Django admin lists."""

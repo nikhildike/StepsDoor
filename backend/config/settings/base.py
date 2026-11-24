@@ -347,6 +347,12 @@ LISTING_STALE_DAYS = config('LISTING_STALE_DAYS', default=14, cast=int)
 SCRAPER_ALERT_EMAILS = config('SCRAPER_ALERT_EMAILS', default='', cast=Csv())
 SCRAPER_ALERT_AFTER_FAILURES = config('SCRAPER_ALERT_AFTER_FAILURES', default=3, cast=int)
 
+# Public web app URL, used to build links in emails (alert digests link to
+# {FRONTEND_URL}/tenders/<id> etc. and to {FRONTEND_URL}/seeker/alerts to manage alerts).
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000').rstrip('/')
+# Most listings shown in one alert digest email; the rest are summarised as "…and N more".
+ALERT_EMAIL_MAX_ITEMS = config('ALERT_EMAIL_MAX_ITEMS', default=20, cast=int)
+
 
 # ===========================================================================
 # CACHE (django-redis — falls back to in-memory in dev if Redis unavailable)

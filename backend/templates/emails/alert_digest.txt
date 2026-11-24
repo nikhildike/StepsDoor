@@ -1,0 +1,14 @@
+{% comment %}Plain-text alert digest, rendered by apps.notifications.alert_emails._send_digest. Context: name, label, noun, count, items (title/url/details), more, manage_url, site_url.{% endcomment %}{% autoescape off %}Hi {{ name }},
+
+Here {% if count == 1 %}is 1 new match{% else %}are {{ count }} new matches{% endif %} for your {{ label }} alerts on StepsDoor:
+{% for item in items %}
+- {{ item.title }}{% if item.details %}
+  {{ item.details }}{% endif %}
+  {{ item.url }}
+{% endfor %}{% if more %}
+…and {{ more }} more {{ noun }} on StepsDoor: {{ site_url }}
+{% endif %}
+Manage or pause your alerts: {{ manage_url }}
+
+— StepsDoor
+{% endautoescape %}

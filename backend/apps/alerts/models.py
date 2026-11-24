@@ -25,6 +25,7 @@ class JobAlert(models.Model):
     salary_min = models.IntegerField(null=True, blank=True)  # optional minimum salary threshold; null = no minimum
     is_active = models.BooleanField(default=True)  # toggled off to pause matching/notifications without deleting the alert
     created_at = models.DateTimeField(auto_now_add=True)  # set once at creation, used for admin sorting/inspection
+    last_checked_at = models.DateTimeField(null=True, blank=True)  # listings created after this haven't been matched/emailed yet; set by apps.notifications.alert_emails after each run (null = since the alert was created)
 
     class Meta:
         verbose_name = 'Job Alert'

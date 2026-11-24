@@ -45,7 +45,14 @@ SCHEDULE = {
         {'minute': '30', 'hour': '7'},
         {},
         6 * 3600,
-        'The task matches tenders created in the last 24 hours, so running it daily avoids repeat matches.',
+        'Emails each user one digest of tenders new since their alert was last checked.',
+    ),
+    'Match job alerts (daily)': (
+        'apps.alerts.tasks.match_job_alerts',
+        {'minute': '50', 'hour': '7'},
+        {},
+        6 * 3600,
+        'Emails job seekers one digest of company jobs posted since their alert was last checked.',
     ),
     'Alert on failing scrapers (daily)': (
         'apps.tenders.tasks.alert_failing_scrapers',
@@ -59,7 +66,7 @@ SCHEDULE = {
         {'minute': '40', 'hour': '7'},
         {},
         6 * 3600,
-        'Same 24-hour window as tender alerts.',
+        'Same digest as tender alerts, for government jobs.',
     ),
 }
 
@@ -114,4 +121,4 @@ class Command(BaseCommand):
         for task in PeriodicTask.objects.select_related('crontab', 'interval').order_by('name'):
             when = f'cron "{task.crontab}"' if task.crontab else f'every {task.interval}'
             state = 'on ' if task.enabled else 'OFF'
-            self.stdout.write(f'  [{state}] {task.name:42} {when:45} → {task.task}')
+            self.stdout.write(f'  [{state}] {task.name:42} {when:45} -> {task.task}')

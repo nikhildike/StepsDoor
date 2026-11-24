@@ -76,44 +76,46 @@ def fetch_ncs_jobs():
 @shared_task
 def match_govtjob_alerts():
     """
-    Match govt jobs published in the last 24 hours against active GovtJobAlerts.
+    Email each user a digest of new govt jobs matching their active GovtJobAlerts.
 
-    Invoked periodically by Celery Beat after scraping runs (mirroring
-    `match_tender_alerts` in the tenders pipeline), so job seekers with a
-    saved `GovtJobAlert` get notified about newly scraped listings that match
-    their keyword/state/category filters.
+    Runs daily via Celery Beat (`setup_scraper_schedule`), mirroring
+    `apps.tenders.tasks.match_tender_alerts`: each alert is matched against active
+    govt jobs created since its `last_checked_at`, and
+    `apps.notifications.alert_emails.send_alert_digests` sends one email per user.
+    Returns its counts dict.
     """
-    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+    from django.conf import settings
     from django.db.models import Q
     from apps.govtjobs.models import GovtJob, GovtJobAlert
+    from apps.notifications.alert_emails import AlertKind, DigestItem, send_alert_digests
+    IST = ZoneInfo('Asia/Kolkata')  # application deadlines are IST; show them as such
 
-    since = timezone.now() - timedelta(hours=24)
-    # Only consider jobs newly inserted in the last day so alerts aren't re-fired for old listings
-    new_jobs = GovtJob.objects.filter(created_at__gte=since, is_active=True)
-
-    if not new_jobs.exists():
-        return
-
-    alerts = GovtJobAlert.objects.filter(is_active=True).select_related('user')
-    matched = 0
-
-    for alert in alerts:
-        # Build up an AND of only the filters the user actually set; an alert
-        # with no filters at all should match every new job (see `filters else new_jobs` below)
-        filters = Q()
+    def match(alert, since):
+        """Active govt jobs created after `since` that pass every filter the alert sets."""
+        qs = GovtJob.objects.filter(is_active=True, created_at__gt=since)
         if alert.keyword:
-            filters &= Q(title__icontains=alert.keyword) | Q(organisation__icontains=alert.keyword)
+            qs = qs.filter(Q(title__icontains=alert.keyword) | Q(organisation__icontains=alert.keyword))
         if alert.state:
-            filters &= Q(state=alert.state)
+            qs = qs.filter(state__iexact=alert.state)
         if alert.category:
-            filters &= Q(category=alert.category)
+            qs = qs.filter(category=alert.category)
+        return qs.order_by('application_deadline', '-created_at')
 
-        matching = new_jobs.filter(filters) if filters else new_jobs
-        count = matching.count()
+    def to_item(job):
+        """Digest line: title, then organisation · last date to apply."""
+        details = [job.organisation]
+        if job.application_deadline:
+            details.append(f"apply by {timezone.localtime(job.application_deadline, IST):%d %b %Y}")
+        return DigestItem(
+            title=job.title,
+            url=f'{settings.FRONTEND_URL}/govt-jobs/{job.pk}',
+            details=' · '.join(d for d in details if d),
+        )
 
-        if count:
-            matched += count
-            # TODO: Week 10 — call notification service to send email/push
-            logger.info(f"GovtJob alert match: {alert.user.email} — {count} new job(s)")
-
-    logger.info(f"Govt job alert matching done. {matched} notifications queued.")
+    counts = send_alert_digests(
+        GovtJobAlert.objects.filter(is_active=True).select_related('user'),
+        AlertKind(noun='government jobs', label='government job', user_of=lambda a: a.user, match=match, to_item=to_item),
+    )
+    logger.info(f"match_govtjob_alerts: {counts}")
+    return counts

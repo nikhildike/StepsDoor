@@ -125,6 +125,7 @@ class GovtJobAlert(models.Model):
     category = models.CharField(max_length=50, blank=True)  # Optional category filter; blank means match any category
     is_active = models.BooleanField(default=True)  # Whether this alert is currently enabled; inactive alerts are skipped by match_govtjob_alerts
     created_at = models.DateTimeField(auto_now_add=True)  # When the alert was first created
+    last_checked_at = models.DateTimeField(null=True, blank=True)  # listings created after this haven't been matched/emailed yet; set by apps.notifications.alert_emails after each run (null = since the alert was created)
 
     def __str__(self):
         """Human-readable representation, e.g. "user — keyword | state | category" or "user — All govt jobs" when no filters are set."""
