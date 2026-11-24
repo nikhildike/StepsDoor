@@ -200,10 +200,10 @@ Celery Beat (schedule from `setup_scraper_schedule`, all times IST)
       → TenderPipeline / GovtJobPipeline → update_or_create() on Tender/GovtJob
       → ScraperLogPipeline → final status + counts on ScraperLog, stamps ScraperSource.last_scraped_at
   00:15 daily          → expire_stale_listings  (hides listings past deadline or unseen for LISTING_STALE_DAYS)
-  09:00 daily          → alert_failing_scrapers (emails SCRAPER_ALERT_EMAILS; see runbook below)
   07:30 / 07:40 daily  → match_tender_alerts / match_govtjob_alerts
       → listings created in the last 24h matched against alerts (daily, so nothing matches twice);
         notification dispatch still TODO
+  09:00 daily          → alert_failing_scrapers (emails SCRAPER_ALERT_EMAILS; see runbook below)
 ```
 
 - **Never run `CrawlerProcess` inside a Celery task.** Twisted's reactor can't restart in a long-lived worker (`ReactorNotRestartable` from the second task on), which is why `run_source()` uses a subprocess. `run_scrapers` runs in-process only because the CLI exits afterwards.
