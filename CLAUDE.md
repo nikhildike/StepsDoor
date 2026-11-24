@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What is StepsDoor
 
 A job board SaaS for the Indian market with three content types:
-1. **Private job listings** — companies pay a subscription to post; job seekers browse free and are redirected to the company's own careers page to apply
+1. **Private job listings** — posted by companies (subscription) and contractors; job seekers browse free and are redirected to the poster's own careers page to apply. Posting is gated by `CanPostJobs` (`apps/jobs/views.py`): a contractor's first post creates a `Company` from their `ContractorProfile.firm_name` (they keep `is_contractor`, not `is_company`), and they manage jobs at `/seeker/post-job` / `/seeker/jobs` (same pages as `/dashboard/...`, base path via `useDashboardBase`). Update/delete only see the caller's own jobs (inactive included).
 2. **Government tenders** — scraped from public portals (mahatenders.gov.in, eprocure.gov.in, etc.), free but **members only** (login required)
 3. **Government jobs** — scraped/fetched from NCS API and recruitment portals, free but **members only** (login required)
 

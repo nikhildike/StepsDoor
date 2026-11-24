@@ -1,8 +1,9 @@
 /**
  * Company Manage Jobs page.
  *
- * Route: `/dashboard/jobs` (nested under the company dashboard layout).
- * Access: company accounts only — mounted behind `ProtectedRoute requireCompany`.
+ * Routes: `/dashboard/jobs` (company dashboard) and `/seeker/jobs` (contractor dashboard).
+ * Access: company accounts (behind `ProtectedRoute requireCompany`) and contractors (inside the
+ * `/seeker` layout); the API enforces it — see CanPostJobs in backend/apps/jobs/views.py.
  *
  * Lists all of the company's own job postings (active and inactive) in a table
  * with per-row actions to toggle a listing active/inactive or delete it, plus
@@ -12,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PlusCircle, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
 import { jobService } from '@/services/jobService'
+import { useDashboardBase } from '@/hooks/useDashboardBase'
 import { Button } from '@/components/ui/Button'
 
 /**
@@ -19,6 +21,8 @@ import { Button } from '@/components/ui/Button'
  * delete actions per row.
  */
 export default function ManageJobs() {
+  // '/dashboard' for companies, '/seeker' for contractors (this page is mounted in both layouts).
+  const base = useDashboardBase()
   // Full list of the company's job postings (not paginated/limited, unlike the dashboard's "recent" view).
   const [jobs, setJobs] = useState([])
   // True while the initial fetch is in flight.
@@ -65,7 +69,7 @@ export default function ManageJobs() {
           <h1 className="text-2xl font-bold">Manage Jobs</h1>
           <p className="text-muted-foreground mt-1">{jobs.length} total posting{jobs.length !== 1 ? 's' : ''}</p>
         </div>
-        <Link to="/dashboard/post-job">
+        <Link to={`${base}/post-job`}>
           <Button><PlusCircle className="h-4 w-4 mr-2" />Post a Job</Button>
         </Link>
       </div>
@@ -75,7 +79,7 @@ export default function ManageJobs() {
           // Empty state: no jobs posted yet.
           <div className="p-12 text-center text-muted-foreground">
             <p>No jobs posted yet.</p>
-            <Link to="/dashboard/post-job" className="text-primary text-sm hover:underline mt-2 inline-block">
+            <Link to={`${base}/post-job`} className="text-primary text-sm hover:underline mt-2 inline-block">
               Post your first job →
             </Link>
           </div>

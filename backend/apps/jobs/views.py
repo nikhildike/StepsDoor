@@ -2,12 +2,13 @@
 
 Exposes `JobPostViewSet`, the single DRF ViewSet backing all job
 listing endpoints: public browsing by anonymous job seekers, CRUD by
-authenticated company users managing their own listings, and the
+company and contractor accounts managing their own listings, and the
 click-tracking endpoint used when a job seeker clicks "Apply" (which
 redirects them off-platform to the company's careers page).
 """
 from django.db import models as db_models
 from rest_framework import viewsets, permissions
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
@@ -18,14 +19,53 @@ from core.mixins import PublicActionsAuthMixin
 from .models import JobPost
 from .serializers import JobPostSerializer
 
+# Actions that change a listing; they only ever see the caller's own jobs (see get_queryset).
+OWNER_ACTIONS = ('update', 'partial_update', 'destroy')
+
+
+class CanPostJobs(permissions.BasePermission):
+    """Company accounts (store owners included — they're is_company too) and contractors may post jobs."""
+    message = 'Only company or contractor accounts can post jobs.'
+
+    def has_permission(self, request, view):
+        """True for an authenticated company or contractor user."""
+        user = request.user
+        return bool(user and user.is_authenticated and (user.is_company or user.is_contractor))
+
+
+def posting_company(user):
+    """
+    The Company a user's job posts belong to, creating one for a contractor on first post.
+
+    JobPost.company is required, and contractors register with a ContractorProfile rather
+    than a Company. Their first post creates a Company from the firm name (as registration
+    does for company and store-owner accounts), which also gives the firm a public careers
+    page at /careers/<slug>. The user's role flags are left alone — they stay a contractor.
+    """
+    from apps.companies.models import Company
+    company = Company.objects.filter(user=user).first()
+    if company:
+        return company
+    if not user.is_contractor:
+        raise PermissionDenied(CanPostJobs.message)
+    profile = getattr(user, 'contractor_profile', None)
+    return Company.objects.create(
+        user=user,
+        name=(profile.firm_name if profile else '') or user.get_full_name() or user.username,
+        gst_number=profile.gstin if profile else '',
+        pan_number=profile.pan_number if profile else '',
+        contact_email=user.email or (profile.contact_email if profile else ''),
+    )
+
 
 class JobPostViewSet(PublicActionsAuthMixin, viewsets.ModelViewSet):
     """CRUD + browsing endpoints for `JobPost`.
 
     Anonymous job seekers use `list`/`retrieve`/`track_click` to
-    browse jobs and apply (redirect). Authenticated company users use
-    the standard create/update/delete actions plus `my_jobs` to
-    manage their own postings from the company dashboard.
+    browse jobs and apply (redirect). Company and contractor accounts use
+    create (CanPostJobs) plus update/delete and `my_jobs` to manage their
+    own postings — from the company dashboard (/dashboard/jobs) or the
+    contractor dashboard (/seeker/jobs).
     """
     serializer_class = JobPostSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -44,21 +84,28 @@ class JobPostViewSet(PublicActionsAuthMixin, viewsets.ModelViewSet):
 
         Called by DRF per-request to decide who may hit this action.
         Job seekers never log in to browse or apply, so list/retrieve/
-        track_click are open; posting/editing/deleting a job requires
-        an authenticated company user.
+        track_click are open; posting needs a company or contractor
+        account; editing/deleting needs login and is limited to the
+        caller's own jobs by get_queryset.
         """
         if self.action in ['list', 'retrieve', 'track_click']:
             return [permissions.AllowAny()]
+        if self.action == 'create':
+            return [CanPostJobs()]
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
-        """Base queryset for list/retrieve: only active, non-expired-looking listings.
-
-        Filters to `is_active=True` so job seekers never see listings a
-        company has deactivated, and select_related('company') avoids an
-        extra query per row for the denormalized company_name/slug/logo
-        fields in the serializer.
         """
+        Public actions see active listings; edit/delete actions see only the caller's own jobs.
+
+        For list/retrieve, `is_active=True` keeps deactivated listings out of public view.
+        For update/partial_update/destroy the queryset is the caller's jobs — active or
+        not — so (a) nobody can edit or delete another poster's job (404), and (b) an owner
+        can reactivate a job they paused. select_related('company') avoids a query per row
+        for the serializer's company fields.
+        """
+        if self.action in OWNER_ACTIONS:
+            return JobPost.objects.filter(company__user=self.request.user).select_related('company')
         return JobPost.objects.filter(is_active=True).select_related('company')
 
     def perform_create(self, serializer):
@@ -66,10 +113,10 @@ class JobPostViewSet(PublicActionsAuthMixin, viewsets.ModelViewSet):
 
         Called by DRF's CreateModelMixin after validation. The company
         is never taken from client input (see read_only_fields in the
-        serializer) — it's always the company owned by the logged-in
-        user, so a company can only ever post jobs under its own account.
+        serializer) — it's always the logged-in user's own company
+        (created on a contractor's first post, see posting_company).
         """
-        serializer.save(company=self.request.user.company)
+        serializer.save(company=posting_company(self.request.user))
 
     @action(detail=False, methods=['get'], url_path='my', permission_classes=[permissions.IsAuthenticated])
     def my_jobs(self, request):

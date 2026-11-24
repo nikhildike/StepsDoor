@@ -1,8 +1,9 @@
 /**
  * Company Post Job page.
  *
- * Route: `/dashboard/post-job` (nested under the company dashboard layout).
- * Access: company accounts only — mounted behind `ProtectedRoute requireCompany`.
+ * Routes: `/dashboard/post-job` (company dashboard) and `/seeker/post-job` (contractor dashboard).
+ * Access: company accounts (behind `ProtectedRoute requireCompany`) and contractors (inside the
+ * `/seeker` layout); the API enforces it — see CanPostJobs in backend/apps/jobs/views.py.
  *
  * Renders the job-posting form used by companies to create a new listing.
  * Note: despite the CLAUDE.md project notes mentioning TipTap for job descriptions,
@@ -15,6 +16,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { jobService } from '@/services/jobService'
+import { useDashboardBase } from '@/hooks/useDashboardBase'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 
@@ -51,6 +53,8 @@ const JOB_TYPES = [
  */
 export default function PostJob() {
   const navigate = useNavigate()
+  // '/dashboard' for companies, '/seeker' for contractors (this page is mounted in both layouts).
+  const base = useDashboardBase()
   // Server-side/validation error message shown above the form (network or API errors).
   const [error, setError] = useState('')
   // React Hook Form wiring: register() binds inputs, handleSubmit runs validation via Zod
@@ -71,7 +75,7 @@ export default function PostJob() {
       if (!data.salary_max) delete data.salary_max
       if (!data.expires_at) delete data.expires_at
       await jobService.create(data)
-      navigate('/dashboard/jobs')
+      navigate(`${base}/jobs`)
     } catch (err) {
       const detail = err?.response?.data
       if (typeof detail === 'object') {
@@ -169,7 +173,7 @@ export default function PostJob() {
             {isSubmitting ? 'Posting...' : 'Post Job'}
           </Button>
           {/* Cancel just navigates back to the Manage Jobs list without saving. */}
-          <Button type="button" variant="outline" onClick={() => navigate('/dashboard/jobs')}>
+          <Button type="button" variant="outline" onClick={() => navigate(`${base}/jobs`)}>
             Cancel
           </Button>
         </div>

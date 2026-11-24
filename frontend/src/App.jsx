@@ -202,6 +202,11 @@ export default function App() {
         {/* Tender listings rendered inside the seeker layout so contractors keep
             the sidebar visible when browsing tenders from their dashboard. */}
         <Route path="tenders" element={<Tenders />} />
+        {/* Contractors post and manage jobs from their own dashboard (same pages as
+            /dashboard/post-job and /dashboard/jobs; the API allows company and
+            contractor accounts — see CanPostJobs in apps/jobs/views.py). */}
+        <Route path="post-job" element={<PostJob />} />
+        <Route path="jobs" element={<ManageJobs />} />
         {/* Browse pages linked from the dashboard sidebar, rendered inside the seeker
             layout too so the dashboard menu stays visible (public versions above). */}
         <Route path="services" element={<Services />} />

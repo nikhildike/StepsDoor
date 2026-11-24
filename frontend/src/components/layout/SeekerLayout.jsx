@@ -16,7 +16,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
-import { LayoutDashboard, Bookmark, Bell, User, LogOut, Menu, X, FileText, ShoppingBag, Store, Wrench } from 'lucide-react'
+import { LayoutDashboard, Bookmark, Bell, User, LogOut, Menu, X, FileText, ShoppingBag, Store, Wrench, PlusCircle, Briefcase } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
 // Browse links shown to job seekers and contractors. They point at /seeker/* copies
@@ -36,13 +36,16 @@ const SEEKER_NAV = [
   { to: '/seeker/profile', label: 'My Profile',    icon: User },
 ]
 
-// Nav items shown to contractors — tender-focused, no saved-jobs entry.
+// Nav items shown to contractors — tender-focused, no saved-jobs entry, plus
+// posting/managing their own job listings (/seeker/post-job, /seeker/jobs).
 // "Tenders" links to /seeker/tenders so the sidebar stays visible (that
 // route renders the public Tenders page inside the seeker layout).
 const CONTRACTOR_NAV = [
   { to: '/seeker',          label: 'Dashboard',     icon: LayoutDashboard, end: true },
   { to: '/seeker/tenders',  label: 'Tenders',       icon: FileText },
   { to: '/seeker/alerts',   label: 'Tender Alerts', icon: Bell },
+  { to: '/seeker/post-job', label: 'Post a Job',    icon: PlusCircle },
+  { to: '/seeker/jobs',     label: 'My Jobs',       icon: Briefcase },
   { to: '/seeker/profile',  label: 'My Profile',    icon: User },
 ]
 
