@@ -41,12 +41,12 @@ def scrape_govtjob_portal(portal_name: str):
 
 
 @shared_task
-def scrape_all_govtjob_portals(expires_seconds: int = 5 * 3600):
+def scrape_all_govtjob_portals(expires_seconds: int = 20 * 3600):
     """Dispatch one `scrape_govtjob_portal` task per active govt job source.
 
-    Celery Beat calls this every 6 hours (`setup_scraper_schedule`), mirroring the
-    tenders pipeline's `scrape_all_portals`. `expires_seconds` (default 5 h, under the
-    interval) drops queued runs that didn't start before the next round, so a worker
+    Celery Beat calls this daily at 11:30 IST (`setup_scraper_schedule`), mirroring the
+    tenders pipeline's `scrape_all_portals`. `expires_seconds` (default 20 h, under the
+    daily interval) drops queued runs that didn't start before the next round, so a worker
     outage doesn't leave duplicate runs piled up. Returns the number of tasks queued.
     """
     from apps.tenders.models import ScraperSource

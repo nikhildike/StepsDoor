@@ -307,16 +307,51 @@ class ScheduleTests(TestCase):
 
         call_command('setup_scraper_schedule', stdout=StringIO())
         self.assertEqual(set(PeriodicTask.objects.values_list('name', flat=True)), set(SCHEDULE))
-        hourly = PeriodicTask.objects.get(name='Scrape tender portals (hourly)')
-        self.assertEqual((hourly.crontab.minute, hourly.crontab.hour, str(hourly.crontab.timezone)), ('5', '*', 'Asia/Kolkata'))
+        tenders = PeriodicTask.objects.get(name='Scrape tender portals (11:30 and 17:30)')
+        self.assertEqual((tenders.crontab.minute, tenders.crontab.hour, str(tenders.crontab.timezone)),
+                         ('30', '11,17', 'Asia/Kolkata'))
+        for name in ('Scrape govt job sources (daily 11:30)', 'Fetch private company careers jobs (daily 11:30)'):
+            jobs = PeriodicTask.objects.get(name=name)
+            self.assertEqual((jobs.crontab.minute, jobs.crontab.hour), ('30', '11'), name)
+        # Alert digests go out after the 11:30 scrapes, 10 minutes apart.
+        alert_times = {n: (t.crontab.minute, t.crontab.hour) for n, t in
+                       ((t.name, t) for t in PeriodicTask.objects.filter(name__startswith='Match '))}
+        self.assertEqual(alert_times, {'Match tender alerts (daily)': ('30', '12'),
+                                       'Match govt job alerts (daily)': ('40', '12'),
+                                       'Match job alerts (daily)': ('50', '12')})
 
-        PeriodicTask.objects.filter(pk=hourly.pk).update(enabled=False)  # an admin pauses it
+        PeriodicTask.objects.filter(pk=tenders.pk).update(enabled=False)  # an admin pauses it
         call_command('setup_scraper_schedule', stdout=StringIO())
-        self.assertFalse(PeriodicTask.objects.get(pk=hourly.pk).enabled)
+        self.assertFalse(PeriodicTask.objects.get(pk=tenders.pk).enabled)
         self.assertEqual(PeriodicTask.objects.count(), len(SCHEDULE))  # no duplicates
 
         call_command('setup_scraper_schedule', '--reset', stdout=StringIO())
-        self.assertTrue(PeriodicTask.objects.get(pk=hourly.pk).enabled)
+        self.assertTrue(PeriodicTask.objects.get(pk=tenders.pk).enabled)
+
+    def test_old_schedule_names_are_renamed_and_reset_to_the_new_times(self):
+        """An environment set up with the old hourly/6-hourly entries doesn't keep running them."""
+        import json
+        from io import StringIO
+        from django.core.management import call_command
+        from django_celery_beat.models import CrontabSchedule, PeriodicTask
+        from apps.tenders.management.commands.setup_scraper_schedule import SCHEDULE
+
+        hourly = CrontabSchedule.objects.create(minute='5', hour='*', timezone='Asia/Kolkata')
+        PeriodicTask.objects.create(name='Scrape tender portals (hourly)', task='apps.tenders.tasks.scrape_all_portals',
+                                    crontab=hourly, kwargs=json.dumps({'expires_seconds': 3000}))
+        six_hourly = CrontabSchedule.objects.create(minute='20', hour='0,6,12,18', timezone='Asia/Kolkata')
+        PeriodicTask.objects.create(name='Scrape govt job sources (every 6 hours)',
+                                    task='apps.govtjobs.tasks.scrape_all_govtjob_portals', crontab=six_hourly)
+
+        call_command('setup_scraper_schedule', '--reset', stdout=StringIO())
+        names = set(PeriodicTask.objects.values_list('name', flat=True))
+        self.assertEqual(names, set(SCHEDULE))
+        self.assertNotIn('Scrape tender portals (hourly)', names)
+        tenders = PeriodicTask.objects.get(name='Scrape tender portals (11:30 and 17:30)')
+        self.assertEqual((tenders.crontab.minute, tenders.crontab.hour), ('30', '11,17'))
+        self.assertEqual(json.loads(tenders.kwargs), {'expires_seconds': 5 * 3600})
+        govt = PeriodicTask.objects.get(name='Scrape govt job sources (daily 11:30)')
+        self.assertEqual((govt.crontab.minute, govt.crontab.hour), ('30', '11'))
 
     def test_fan_out_queues_active_sources_with_expiry(self):
         """scrape_all_portals queues one task per ACTIVE tender source, each expiring before the next round."""

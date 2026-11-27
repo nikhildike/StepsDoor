@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 @shared_task
 def fetch_all_career_sources():
-    """Fetch every active `CareerSource` one after another (twice daily via Celery Beat).
+    """Fetch every active `CareerSource` one after another (daily at 11:30 IST via Celery Beat).
 
     Runs sequentially with one shared `PoliteFetcher` so shared ATS hosts
     (api.lever.co, boards-api.greenhouse.io) still get at most ~1 request a

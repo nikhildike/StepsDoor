@@ -42,7 +42,7 @@ python manage.py test
 python manage.py test apps.jobs          # single app
 celery -A config worker -l info          # Celery worker (on Windows add `-P solo` — prefork isn't supported there)
 celery -A config beat -l info            # Celery Beat scheduler (DatabaseScheduler — reads the schedule from the DB)
-python manage.py setup_scraper_schedule  # create the Beat schedule once per environment (--list to view, --reset to restore defaults)
+python manage.py setup_scraper_schedule  # create the Beat schedule once per environment (--list to view, --reset to restore defaults; after a schedule change in code, run --reset so existing entries get the new times — renamed entries are migrated via RENAMED)
 ```
 
 The Celery app is `config/celery.py` (imported by `config/__init__.py` so `@shared_task`s bind to it); all settings are `CELERY_*` in `base.py`. Both worker and beat need Redis (`CELERY_BROKER_URL`).
@@ -192,17 +192,19 @@ Portals are registered in the DB via the `ScraperSource` model (`apps/tenders/mo
 
 ```
 Celery Beat (schedule from `setup_scraper_schedule`, all times IST)
-  hourly at :05        → scrape_all_portals            (tenders; NIC shows only the 10 newest)
-  00:20/06:20/12:20/18:20 → scrape_all_govtjob_portals (govt jobs)
+  11:30 and 17:30      → scrape_all_portals            (tenders; NIC shows only the 10 newest, so a portal
+                          publishing more than 10 between runs loses the rest)
+  11:30 daily          → scrape_all_govtjob_portals    (govt jobs)
       → one scrape_portal / scrape_govtjob_portal per active source, queued with `expires`
         just under the interval so a worker outage doesn't pile up duplicate runs
   → scrape_portal(portal_name) task
       → apps.tenders.scraping.run_source(): creates ScraperLog, runs `scrapy crawl` as a CHILD PROCESS
       → TenderPipeline / GovtJobPipeline → update_or_create() on Tender/GovtJob
       → ScraperLogPipeline → final status + counts on ScraperLog, stamps ScraperSource.last_scraped_at
-  05:40 / 17:40        → fetch_all_career_sources (private-company ATS feeds, apps/careers — not Scrapy)
+  11:30 daily          → fetch_all_career_sources (private-company ATS feeds, apps/careers — not Scrapy)
   00:15 daily          → expire_stale_listings  (hides listings past deadline or unseen for LISTING_STALE_DAYS)
-  07:30 / 07:40 / 07:50 daily → match_tender_alerts / match_govtjob_alerts / match_job_alerts
+  12:30 / 12:40 / 12:50 daily → match_tender_alerts / match_govtjob_alerts / match_job_alerts
+                          (an hour after the 11:30 scrapes, so that morning's listings are sent the same day)
       → each alert matched against listings created since its last_checked_at; one digest
         email per user (apps.notifications.alert_emails); push (FCM) not built yet
   09:00 daily          → alert_failing_scrapers (emails SCRAPER_ALERT_EMAILS; see runbook below)
@@ -243,7 +245,7 @@ Unlike the govt scrapers, everything here **obeys robots.txt**, sends an identif
 
 1. **Classify** — `python manage.py classify_careers_ats [--input companies.csv] [--output careers_ats.csv] [--limit N] [--no-api]` reads the web `COMPANY_DIRECTORY` (`frontend/src/pages/public/Companies.jsx`, mirrored in `mobile/src/data/companyDirectory.ts`) and writes a CSV with each page's ATS (Greenhouse, Lever, Workday, Oracle, SuccessFactors, Darwinbox, …), JSON-LD `JobPosting` count, or `custom`/`js_shell`, plus fetch status (`blocked` = 401/403 bot wall, `robots_disallowed`, `http_404` = the directory URL is wrong — fix it in both directory files).
 2. **Import** — `python manage.py import_career_sources careers_ats.csv [--dry-run]` creates `CareerSource` rows for ATSs with an adapter. Re-imports keep `is_active`.
-3. **Fetch** — `fetch_all_career_sources` (Celery Beat, 05:40 and 17:40 IST; added by `setup_scraper_schedule`) or `python manage.py fetch_career_jobs [--source ID ...] [--ats workday]`, or admin → Career sources → "Fetch now". `apps/careers/sync.py` upserts by `(source, external_id)` and deactivates jobs the feed no longer lists; a failed fetch changes no jobs and bumps `consecutive_failures` (ERROR log at `CAREER_ALERT_AFTER_FAILURES`, default 3).
+3. **Fetch** — `fetch_all_career_sources` (Celery Beat, daily 11:30 IST; added by `setup_scraper_schedule`) or `python manage.py fetch_career_jobs [--source ID ...] [--ats workday]`, or admin → Career sources → "Fetch now". `apps/careers/sync.py` upserts by `(source, external_id)` and deactivates jobs the feed no longer lists; a failed fetch changes no jobs and bumps `consecutive_failures` (ERROR log at `CAREER_ALERT_AFTER_FAILURES`, default 3).
 
 Adapters (`apps/careers/adapters.py`) keep **India jobs only** and at most `CAREER_JOBS_MAX_PER_SOURCE` (default 300) per company:
 

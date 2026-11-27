@@ -19,26 +19,28 @@ TZ = 'Asia/Kolkata'
 
 # name → (task, crontab fields, kwargs, expire_seconds, why)
 SCHEDULE = {
-    'Scrape tender portals (hourly)': (
+    # Runs 6 h then 18 h apart, so queued portal runs expire after 5 h (under the shorter gap).
+    'Scrape tender portals (11:30 and 17:30)': (
         'apps.tenders.tasks.scrape_all_portals',
-        {'minute': '5', 'hour': '*'},
-        {'expires_seconds': 3000},
-        3000,
-        'NIC portals only expose their 10 newest tenders without a captcha, so frequent runs catch more.',
-    ),
-    'Scrape govt job sources (every 6 hours)': (
-        'apps.govtjobs.tasks.scrape_all_govtjob_portals',
-        {'minute': '20', 'hour': '0,6,12,18'},
+        {'minute': '30', 'hour': '11,17'},
         {'expires_seconds': 5 * 3600},
         5 * 3600,
-        'Recruiters post a few openings a week; four runs a day is plenty.',
+        'Twice a day, late morning and evening. NIC portals only show their 10 newest tenders without a captcha, '
+        'so a busy portal can publish more than 10 between runs and those are missed.',
     ),
-    'Fetch private company careers jobs (twice daily)': (
+    'Scrape govt job sources (daily 11:30)': (
+        'apps.govtjobs.tasks.scrape_all_govtjob_portals',
+        {'minute': '30', 'hour': '11'},
+        {'expires_seconds': 20 * 3600},
+        20 * 3600,
+        'Recruiters post a few openings a week; once a day is enough.',
+    ),
+    'Fetch private company careers jobs (daily 11:30)': (
         'apps.careers.tasks.fetch_all_career_sources',
-        {'minute': '40', 'hour': '5,17'},
+        {'minute': '30', 'hour': '11'},
         {},
-        10 * 3600,
-        "Private companies' own ATS feeds; twice a day keeps listings fresh while staying polite to their sites.",
+        20 * 3600,
+        "Private companies' own ATS feeds, once a day — fresh listings while staying polite to their sites.",
     ),
     'Expire stale listings (daily)': (
         'apps.tenders.tasks.expire_stale_listings',
@@ -49,14 +51,15 @@ SCHEDULE = {
     ),
     'Match tender alerts (daily)': (
         'apps.tenders.tasks.match_tender_alerts',
-        {'minute': '30', 'hour': '7'},
+        {'minute': '30', 'hour': '12'},
         {},
         6 * 3600,
-        'Emails each user one digest of tenders new since their alert was last checked.',
+        'Emails each user one digest of tenders new since their alert was last checked. '
+        "An hour after the 11:30 scrape, so that morning's listings go out the same day.",
     ),
     'Match job alerts (daily)': (
         'apps.alerts.tasks.match_job_alerts',
-        {'minute': '50', 'hour': '7'},
+        {'minute': '50', 'hour': '12'},
         {},
         6 * 3600,
         'Emails job seekers one digest of company jobs posted since their alert was last checked.',
@@ -70,7 +73,7 @@ SCHEDULE = {
     ),
     'Match govt job alerts (daily)': (
         'apps.govtjobs.tasks.match_govtjob_alerts',
-        {'minute': '40', 'hour': '7'},
+        {'minute': '40', 'hour': '12'},
         {},
         6 * 3600,
         'Same digest as tender alerts, for government jobs.',
@@ -78,11 +81,22 @@ SCHEDULE = {
 }
 
 
+# Entries renamed when their times changed: old name -> current name. The command
+# renames existing rows in place, so an environment set up with the old names
+# doesn't keep running the old schedule next to the new one. (Run with --reset to
+# apply the new times to a renamed row.)
+RENAMED = {
+    'Scrape tender portals (hourly)': 'Scrape tender portals (11:30 and 17:30)',
+    'Scrape govt job sources (every 6 hours)': 'Scrape govt job sources (daily 11:30)',
+    'Fetch private company careers jobs (twice daily)': 'Fetch private company careers jobs (daily 11:30)',
+}
+
+
 class Command(BaseCommand):
     """
     `python manage.py setup_scraper_schedule` — idempotently registers the PeriodicTask rows
-    Celery Beat runs: hourly tender scraping, 6-hourly govt job scraping, twice-daily private-company
-    careers fetching (apps.careers), daily expiry and
+    Celery Beat runs: tender scraping at 11:30 and 17:30 IST, govt job scraping and private-company
+    careers fetching (apps.careers) daily at 11:30 IST, daily expiry and
     daily alert matching, and a daily failing-scraper alert (see SCHEDULE for times and reasons).
     """
     help = 'Create (or with --reset, restore) the Celery Beat schedule for scrapers, alerts and expiry'
@@ -97,6 +111,14 @@ class Command(BaseCommand):
         import json
 
         if not options['list']:
+            for old, new in RENAMED.items():
+                if PeriodicTask.objects.filter(name=new).exists():
+                    # Both exist (e.g. created by hand): the old one would run the old times — remove it.
+                    deleted, _ = PeriodicTask.objects.filter(name=old).delete()
+                    if deleted:
+                        self.stdout.write(self.style.WARNING(f'Removed: {old} (replaced by "{new}")'))
+                elif PeriodicTask.objects.filter(name=old).update(name=new):
+                    self.stdout.write(self.style.WARNING(f'Renamed: {old} -> {new}'))
             for name, (task, cron, kwargs, expire_seconds, why) in SCHEDULE.items():
                 crontab, _ = CrontabSchedule.objects.get_or_create(
                     minute=cron['minute'], hour=cron['hour'],

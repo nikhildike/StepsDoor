@@ -3,7 +3,7 @@ Celery tasks for the tenders module.
 
 Scheduling is managed via django-celery-beat (DatabaseScheduler). The schedule is
 created by `python manage.py setup_scraper_schedule` (see that command for times):
-  - scrape_all_portals    → hourly (NIC portals only expose their 10 newest tenders)
+  - scrape_all_portals    → 11:30 and 17:30 IST (NIC portals only expose their 10 newest tenders)
   - match_tender_alerts   → daily (emails digests of tenders new since each alert was last checked)
   - expire_stale_listings → daily (covers govt jobs too)
   - alert_failing_scrapers → daily (emails SCRAPER_ALERT_EMAILS about broken sources)
@@ -44,14 +44,14 @@ def scrape_portal(portal_name: str):
 
 
 @shared_task
-def scrape_all_portals(expires_seconds: int = 3000):
+def scrape_all_portals(expires_seconds: int = 5 * 3600):
     """
     Dispatch one `scrape_portal` task per active tender source.
 
-    Celery Beat calls this hourly (`setup_scraper_schedule`). It only fans out — the
+    Celery Beat calls this at 11:30 and 17:30 IST (`setup_scraper_schedule`). It only fans out — the
     crawls run in separate worker tasks so a slow or broken portal can't block the others.
 
-    `expires_seconds` (default 50 min, just under the hourly interval) is set on each
+    `expires_seconds` (default 5 h, under the 6 h gap between the 11:30 and 17:30 runs) is set on each
     queued task: if workers are down or backlogged, a portal's run that didn't start
     before the next round is dropped instead of piling up and running twice.
     Returns the number of tasks queued.
