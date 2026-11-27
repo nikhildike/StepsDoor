@@ -57,7 +57,6 @@ import StoreAccount from '@/pages/store/StoreAccount'
 import PublicLayout from '@/components/layout/PublicLayout'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import SeekerLayout from '@/components/layout/SeekerLayout'
-import StoreLayout from '@/components/layout/StoreLayout'
 import JobsLayout from '@/components/layout/JobsLayout'
 
 /**
@@ -180,6 +179,11 @@ export default function App() {
         <Route path="invoices" element={<Invoices />} />
         {/* Edit company profile details — guard: requireCompany (inherited) */}
         <Route path="profile" element={<CompanyProfile />} />
+        {/* Browse pages from the sidebar, kept inside the company dashboard (same pages as
+            /shopping, /retail-stores, /services) — guard: requireCompany (inherited) */}
+        <Route path="shopping" element={<Shopping />} />
+        <Route path="retail-stores" element={<RetailStores />} />
+        <Route path="services" element={<Services />} />
       </Route>
 
       {/* Seeker routes — guarded by ProtectedRoute (any authenticated user),
@@ -232,12 +236,14 @@ export default function App() {
       </Route>
 
       {/* Store owner routes — guarded by ProtectedRoute requireStore
-          (store-owner accounts only), wrapped in StoreLayout */}
+          (store-owner accounts only), wrapped in DashboardLayout (shared sidebar) */}
       <Route
         path="/store"
         element={
           <ProtectedRoute requireStore>
-            <StoreLayout />
+            {/* Same layout as /dashboard (store owners are company accounts), so the
+                sidebar keeps every button when moving between the two sections. */}
+            <DashboardLayout />
           </ProtectedRoute>
         }
       >

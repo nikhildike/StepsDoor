@@ -133,8 +133,8 @@ function SidebarContent({ user, signOut, onClose, navItems }) {
  * Layout route for /seeker/* pages (job seekers and contractors). A top bar
  * (branding + role) sits above a sidebar and the page content:
  *   - Desktop/tablet (md, 768px+): the sidebar is always open, as a column
- *     beside the content — the same as the company (DashboardLayout) and store
- *     (StoreLayout) dashboards.
+ *     beside the content — the same as the company and store-owner dashboards
+ *     (both DashboardLayout).
  *   - Phones: the sidebar is a slide-over drawer opened by the burger button;
  *     it closes on navigation (route change) or a tap on the backdrop.
  *

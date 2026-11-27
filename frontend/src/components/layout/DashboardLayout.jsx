@@ -3,10 +3,13 @@
  *
  * Page shell for the company dashboard section of the app (routes under
  * /dashboard/*: Dashboard home, Post a Job, Manage Jobs, Analytics,
- * Subscription, Invoices, Company Profile). Renders a persistent sidebar nav
- * on desktop and a collapsible drawer nav on mobile, and renders the active
- * dashboard page via <Outlet />. Used as the layout route element for all
- * company-only pages behind ProtectedRoute requireCompany.
+ * Subscription, Invoices, Company Profile) and, for store owners, the
+ * storefront section (/store/*). Renders a persistent sidebar nav on desktop
+ * and a collapsible drawer nav on mobile, and renders the active page via
+ * <Outlet />. Store owners are always company accounts, so both sections use
+ * this one layout: the sidebar stays the same, with every button, whichever
+ * section they're in (they used to have separate sidebars that swapped on
+ * "My Store").
  */
 import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
@@ -15,14 +18,17 @@ import { useAuthStore } from '@/store/authStore'
 import {
   LayoutDashboard, Briefcase, PlusCircle, BarChart2,
   CreditCard, FileText, Building2, LogOut, Menu, X, Store, ShoppingBag, Wrench,
+  User, Wallet,
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
-// Browse links shown in every authenticated sidebar — public pages any role can visit.
+// Browse links in the company sidebar. They open the same pages as the public
+// site, but mounted inside the dashboard (/dashboard/shopping, …) so the company
+// keeps its sidebar instead of being sent out to the public layout.
 const BROWSE_NAV = [
-  { to: '/shopping',      label: 'Shopping',      icon: ShoppingBag },
-  { to: '/retail-stores', label: 'Retail Stores', icon: Store },
-  { to: '/services',      label: 'Services',      icon: Wrench },
+  { to: '/dashboard/shopping',      label: 'Shopping',      icon: ShoppingBag },
+  { to: '/dashboard/retail-stores', label: 'Retail Stores', icon: Store },
+  { to: '/dashboard/services',      label: 'Services',      icon: Wrench },
 ]
 
 // Primary sidebar navigation entries for the company dashboard.
@@ -38,6 +44,56 @@ const navItems = [
   { to: '/dashboard/profile',      label: 'Company Profile', icon: Building2 },
 ]
 
+// Storefront pages (/store/*), shown as a "My Store" group for store owners only.
+// `end: true` keeps Overview from highlighting on every /store/* page.
+const STORE_NAV = [
+  { to: '/store',              label: 'Store Overview',     icon: Store, end: true },
+  { to: '/store/profile',      label: 'Store Profile',      icon: Building2 },
+  { to: '/store/subscription', label: 'Store Subscription', icon: Wallet },
+  { to: '/store/account',      label: 'My Account',         icon: User },
+]
+
+/**
+ * NavGroup
+ *
+ * One titled group of sidebar links (a title of null renders no heading).
+ * Used by SidebarContent for the company, store and browse groups.
+ *
+ * Props:
+ * - title (string|null) — small uppercase heading above the links.
+ * - items (array) — `{ to, label, icon, end? }` entries.
+ * - onClose (function) — called after a link is clicked, to close the mobile drawer.
+ */
+function NavGroup({ title, items, onClose }) {
+  return (
+    <>
+      {title && (
+        <div className="pt-3 pb-1">
+          <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</p>
+        </div>
+      )}
+      {items.map(({ to, label, icon: Icon, end }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={end}
+          onClick={onClose}
+          className={({ isActive }) => cn(
+            'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+            // Active route gets the solid primary-color pill; inactive routes get the muted hover style
+            isActive
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+          )}
+        >
+          <Icon className="h-4 w-4" />
+          {label}
+        </NavLink>
+      ))}
+    </>
+  )
+}
+
 /**
  * SidebarContent
  *
@@ -49,70 +105,19 @@ const navItems = [
  * Props:
  * - signOut (function) — logs the current company user out; wired to the Sign Out button.
  * - onClose (function) — called after a nav link is clicked, used to close the mobile drawer.
- * - isStoreOwner (boolean) — when true, also renders a "My Store" link to the storefront dashboard.
+ * - isStoreOwner (boolean) — when true, also renders the "My Store" group (STORE_NAV).
  */
 function SidebarContent({ signOut, onClose, isStoreOwner }) {
   return (
     <>
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {/* Render each primary nav item, highlighting the active route via NavLink's isActive */}
-        {navItems.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            onClick={onClose}
-            className={({ isActive }) => cn(
-              'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              // Active route gets the solid primary-color pill; inactive routes get the muted hover style
-              isActive
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </NavLink>
-        ))}
-
+        <NavGroup title={null} items={navItems} onClose={onClose} />
+        {/* Storefront pages, only for company users who also own a store */}
+        {isStoreOwner && <NavGroup title="My Store" items={STORE_NAV} onClose={onClose} />}
         {/* Browse section — public pages accessible from any account type */}
-        <div className="pt-3 pb-1">
-          <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Browse</p>
-        </div>
-        {BROWSE_NAV.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            onClick={onClose}
-            className={({ isActive }) => cn(
-              'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </NavLink>
-        ))}
+        <NavGroup title="Browse" items={BROWSE_NAV} onClose={onClose} />
       </nav>
-      <div className="p-4 border-t space-y-1">
-        {/* Extra link to the storefront dashboard, only shown for company users who also own a store */}
-        {isStoreOwner && (
-          <NavLink
-            to="/store"
-            onClick={onClose}
-            className={({ isActive }) => cn(
-              'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-            )}
-          >
-            <Store className="h-4 w-4" />
-            My Store
-          </NavLink>
-        )}
+      <div className="p-4 border-t">
         <button
           onClick={signOut}
           className="flex items-center gap-3 px-3 py-2 w-full rounded-md text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
@@ -137,14 +142,15 @@ function SidebarContent({ signOut, onClose, isStoreOwner }) {
  *
  * Used as the parent layout element for all /dashboard/* routes (company
  * users only), e.g. wraps Dashboard, PostJob, ManageJobs, Analytics,
- * Subscription, Invoices, Profile pages in the router config.
+ * Subscription, Invoices, Profile pages, and for the /store/* routes
+ * (store owners) in the router config.
  */
 export default function DashboardLayout() {
   const { signOut } = useAuth()
   const { user } = useAuthStore()
   const location = useLocation()
   const [open, setOpen] = useState(false)
-  // Store-owner companies get an extra "My Store" nav link (see SidebarContent above)
+  // Store-owner companies also get the "My Store" nav group (see SidebarContent above)
   const isStoreOwner = !!user?.is_store_owner
 
   // Auto-close the mobile drawer whenever the route changes (e.g. after navigating via a nav link)
