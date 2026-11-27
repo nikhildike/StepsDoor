@@ -16,11 +16,11 @@
  */
 import React, { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { seekerService, AlertMatches } from '@/services/seekerService';
 import { useAuth } from '@/hooks/useAuth';
 import { AlertMatchRow } from '@/components/alerts/AlertMatchesList';
+import { StatCard, StatCards, formatCount } from '@/components/home/StatCards';
 import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
@@ -75,8 +75,8 @@ export function SeekerSummary() {
 
   if (!show) return null;
 
-  const fmt = (n?: number) => (n == null ? '–' : n.toLocaleString('en-IN'));
-  const cards = [
+  const fmt = formatCount;
+  const cards: StatCard[] = [
     { label: 'Saved Jobs', value: fmt(stats?.saved_jobs), note: 'Your bookmarks', icon: 'bookmark', color: Colors.primary,
       onPress: () => navigation.navigate('SavedJobs') },
     { label: 'Active Alerts', value: fmt(stats?.active_alerts),
@@ -88,19 +88,7 @@ export function SeekerSummary() {
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.cards}>
-        {cards.map((c) => (
-          <TouchableOpacity key={c.label} style={styles.card} onPress={c.onPress} activeOpacity={0.8}
-            accessibilityRole="button" accessibilityLabel={`${c.label}: ${c.value}`}>
-            <View style={[styles.icon, { backgroundColor: c.color }]}>
-              <Ionicons name={c.icon as any} size={16} color={Colors.white} />
-            </View>
-            <Text style={styles.value}>{c.value}</Text>
-            <Text style={styles.label} numberOfLines={1}>{c.label}</Text>
-            <Text style={styles.note} numberOfLines={2}>{c.note}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <StatCards cards={cards} />
 
       {stats && (
         <View style={styles.matches}>
@@ -133,19 +121,6 @@ export function SeekerSummary() {
 
 const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
   wrap: { marginBottom: Spacing[5] },
-  cards: { flexDirection: 'row', gap: Spacing[2] },
-  card: {
-    flex: 1,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing[3],
-  },
-  icon: { width: 28, height: 28, borderRadius: BorderRadius.md, alignItems: 'center', justifyContent: 'center' },
-  value: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: Colors.text, marginTop: Spacing[2] },
-  label: { fontSize: FontSize.xs, fontWeight: FontWeight.semibold, color: Colors.text },
-  note: { fontSize: 10, color: Colors.textSecondary, marginTop: 2 },
   matches: { marginTop: Spacing[4] },
   matchesHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: Spacing[2] },
   heading: { fontSize: FontSize.base, fontWeight: FontWeight.bold, color: Colors.text },

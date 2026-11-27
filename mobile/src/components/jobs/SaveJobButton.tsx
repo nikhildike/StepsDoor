@@ -17,15 +17,17 @@ import { useThemeColors } from '@/theme/colors';
  * - `saved`: whether the job is in the seeker's saved list.
  * - `pending`: disables the button while a save/unsave request runs.
  * - `onToggle`: called on press. The press doesn't reach a parent card's onPress.
+ * - `noun`: what's being saved, for the accessibility label ("Save tender"); default 'job'.
  */
 interface Props {
   saved: boolean;
   pending?: boolean;
   onToggle: () => void;
+  noun?: string;
 }
 
-/** SaveJobButton — see `Props`. */
-export function SaveJobButton({ saved, pending = false, onToggle }: Props) {
+/** SaveJobButton — see `Props`. Also used on tender cards (`noun="tender"`). */
+export function SaveJobButton({ saved, pending = false, onToggle, noun = 'job' }: Props) {
   const Colors = useThemeColors();
   return (
     <TouchableOpacity
@@ -34,7 +36,7 @@ export function SaveJobButton({ saved, pending = false, onToggle }: Props) {
       hitSlop={10}
       style={[styles.button, pending && styles.pending]}
       accessibilityRole="button"
-      accessibilityLabel={saved ? 'Remove from saved' : 'Save job'}
+      accessibilityLabel={saved ? 'Remove from saved' : `Save ${noun}`}
       accessibilityState={{ selected: saved, disabled: pending }}
     >
       <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={20} color={saved ? Colors.primary : Colors.textMuted} />

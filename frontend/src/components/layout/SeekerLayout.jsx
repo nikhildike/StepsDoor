@@ -6,7 +6,7 @@
  * signed-in user's role:
  *
  *   Job seeker:  Dashboard · Jobs (private / companies / govt / freelancing tabs) · Saved Jobs · Alerts · My Profile
- *   Contractor:  Dashboard · Tenders · Tender Alerts · Post a Job · My Jobs · My Profile
+ *   Contractor:  Dashboard · Tenders · Saved Tenders · Tender Alerts · Post a Job · My Jobs · My Profile
  *   (plus Shopping / Retail Stores / Services for both)
  *
  * From the md breakpoint (768px) up the sidebar is always open beside the
@@ -46,6 +46,7 @@ const SEEKER_NAV = [
 const CONTRACTOR_NAV = [
   { to: '/seeker',          label: 'Dashboard',     icon: LayoutDashboard, end: true },
   { to: '/seeker/tenders',  label: 'Tenders',       icon: FileText },
+  { to: '/seeker/saved-tenders', label: 'Saved Tenders', icon: Bookmark },
   { to: '/seeker/alerts',   label: 'Tender Alerts', icon: Bell },
   { to: '/seeker/post-job', label: 'Post a Job',    icon: PlusCircle },
   { to: '/seeker/jobs',     label: 'My Jobs',       icon: Briefcase },

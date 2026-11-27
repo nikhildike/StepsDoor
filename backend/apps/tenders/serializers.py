@@ -7,7 +7,7 @@ imported here but currently has no serializer — scrape-run status is admin-onl
 via the API.
 """
 from rest_framework import serializers
-from .models import Tender, TenderAlert, ScraperLog
+from .models import SavedTender, Tender, TenderAlert, ScraperLog
 
 
 class TenderListSerializer(serializers.ModelSerializer):
@@ -55,3 +55,26 @@ class TenderAlertSerializer(serializers.ModelSerializer):
         model = TenderAlert
         fields = ['id', 'keyword', 'state', 'category', 'min_value', 'is_active', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+
+class SavedTenderSerializer(serializers.ModelSerializer):
+    """A saved tender with the tender's list fields nested, plus whether bids are still open.
+
+    Used by `SavedTenderViewSet`. To save, the client sends `{tender: <id>}`; reads
+    return `{id, tender: <id>, saved_at, is_open, details: {...TenderListSerializer}}`
+    so the Saved Tenders page renders cards without a second request.
+    """
+    details = TenderListSerializer(source='tender', read_only=True)  # the tender's card fields
+    is_open = serializers.SerializerMethodField()  # False once inactive or the submission deadline passed
+
+    class Meta:
+        model = SavedTender
+        fields = ['id', 'tender', 'saved_at', 'is_open', 'details']
+        read_only_fields = ['id', 'saved_at']
+        validators = []  # uniqueness is handled by SavedTenderViewSet.create (returns the existing bookmark)
+
+    def get_is_open(self, saved):
+        """Whether the tender can still be bid on."""
+        from django.utils import timezone
+        t = saved.tender
+        return t.is_active and (t.submission_deadline is None or t.submission_deadline > timezone.now())

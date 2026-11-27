@@ -76,4 +76,66 @@ export const tenderService = {
    * Used by: `pages/seeker/Alerts.jsx`.
    */
   deleteAlert: (id) => api.delete(`/tenders/alerts/${id}/`),
+
+  /**
+   * Open tenders matching one tender alert, soonest closing first (same rules as the daily email).
+   *
+   * Endpoint: GET /tenders/alerts/{id}/matches/
+   * @param {number} id - Alert id. @param {Object} [params] - `limit` (default 20, max 50).
+   * @returns {Promise} Axios response promise resolving to `{count, results: [tender list fields]}`.
+   * Used by: `components/tenders/TenderAlertMatches.jsx`.
+   */
+  alertMatches: (id, params) => api.get(`/tenders/alerts/${id}/matches/`, { params }),
+
+  /**
+   * Open tenders matching any active tender alert, each once. Same shape as `alertMatches`.
+   *
+   * Endpoint: GET /tenders/alerts/matches/
+   * Used by: the contractor dashboard (`pages/seeker/Overview.jsx`).
+   */
+  allAlertMatches: (params) => api.get('/tenders/alerts/matches/', { params }),
+
+  /**
+   * Keyword suggestions for the tender alert form, from open tenders' titles.
+   *
+   * Endpoint: GET /tenders/alerts/suggestions/?q=
+   * @returns {Promise} Axios response promise resolving to `[{keyword, count}]`.
+   * Used by: the tender alert form's `KeywordAutocomplete` (pages/seeker/Alerts.jsx).
+   */
+  keywordSuggestions: (q) => api.get('/tenders/alerts/suggestions/', { params: { q } }),
+
+  /**
+   * The signed-in user's saved tenders, newest first.
+   *
+   * Endpoint: GET /tenders/saved/
+   * @returns {Promise} Axios response promise resolving to `[{id, tender, saved_at, is_open, details}]`.
+   * Used by: `hooks/useSavedTenders.js`, `pages/seeker/SavedTenders.jsx`.
+   */
+  saved: () => api.get('/tenders/saved/'),
+
+  /**
+   * Save a tender (idempotent: an already-saved tender returns its existing bookmark).
+   *
+   * Endpoint: POST /tenders/saved/
+   * @param {number} tenderId - The tender's id.
+   */
+  save: (tenderId) => api.post('/tenders/saved/', { tender: tenderId }),
+
+  /**
+   * Remove a saved tender.
+   *
+   * Endpoint: DELETE /tenders/saved/{savedId}/
+   * @param {number} savedId - The bookmark's id (not the tender's).
+   */
+  unsave: (savedId) => api.delete(`/tenders/saved/${savedId}/`),
+
+  /**
+   * Numbers for the contractor dashboard's stat cards.
+   *
+   * Endpoint: GET /tenders/stats/
+   * @returns {Promise} Axios response promise resolving to
+   *   `{saved_tenders, active_alerts, alert_matches, new_today, open_tenders}`.
+   * Used by: `pages/seeker/Overview.jsx` (ContractorDashboard).
+   */
+  stats: () => api.get('/tenders/stats/'),
 }

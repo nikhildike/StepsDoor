@@ -11,15 +11,18 @@
  * matching an alert are also emailed (and pushed) in a daily digest by the
  * backend `alerts` app.
  *
- * Contractors see "Tender Alerts": keyword/state/category/min-value filters
- * that the backend `match_tender_alerts` Celery task matches against new
- * scraped tenders.
+ * Contractors see "Tender Alerts": keyword (suggested from open tender titles
+ * while typing)/state/category/min-value filters. Under each alert,
+ * `TenderAlertMatches` lists the open tenders it matches now, each with a save
+ * toggle; the backend `match_tender_alerts` task also emails new matches daily.
  */
 import { useEffect, useState } from 'react'
 import { GovtJobAlertPanel } from '@/components/govtjobs/GovtJobAlertPanel'
 import { AlertMatches } from '@/components/alerts/AlertMatches'
 import { KeywordAutocomplete } from '@/components/alerts/KeywordAutocomplete'
 import { useSavedJobs } from '@/hooks/useSavedJobs'
+import { useSavedTenders } from '@/hooks/useSavedTenders'
+import { TenderAlertMatches } from '@/components/tenders/TenderAlertMatches'
 import { Bell, Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
 import { Controller, useForm } from 'react-hook-form'
 import { seekerService } from '@/services/seekerService'
@@ -52,15 +55,16 @@ const TENDER_CATEGORIES = [
  * Filters: keyword, state, category, min_value. All are optional — leaving
  * all blank creates an alert that matches every new tender.
  *
- * @param {{ alerts: Array, onCreate: function, onToggle: function, onDelete: function, showForm: boolean, setShowForm: function, isSubmitting: boolean, register: function, handleSubmit: function, reset: function }} props
+ * @param {{ alerts: Array, onCreate: function, onToggle: function, onDelete: function, showForm: boolean, setShowForm: function, isSubmitting: boolean, register: function, control: object, handleSubmit: function, reset: function, tenderSaves: object }} props
+ *   `tenderSaves` is the page's `useSavedTenders()` result, shared by every alert's tender list.
  */
-function TenderAlertPanel({ alerts, onCreate, onToggle, onDelete, showForm, setShowForm, isSubmitting, register, handleSubmit, reset }) {
+function TenderAlertPanel({ alerts, onCreate, onToggle, onDelete, showForm, setShowForm, isSubmitting, register, control, handleSubmit, reset, tenderSaves }) {
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Tender Alerts</h1>
-          <p className="text-muted-foreground mt-1">Get notified when new matching tenders are posted.</p>
+          <p className="text-muted-foreground mt-1">Save a keyword and see every open tender it matches. New matches are also emailed daily.</p>
         </div>
         <Button onClick={() => setShowForm(v => !v)}>
           <Plus className="h-4 w-4 mr-1" /> New Alert
@@ -73,8 +77,19 @@ function TenderAlertPanel({ alerts, onCreate, onToggle, onDelete, showForm, setS
           <h2 className="font-semibold text-sm">New Tender Alert</h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Keyword</label>
-              <Input {...register('keyword')} placeholder="e.g. road construction" className="mt-1" />
+              <label htmlFor="tender-alert-keyword" className="text-xs font-medium text-muted-foreground">Keyword</label>
+              {/* Suggests keywords from open tender titles while typing. */}
+              <Controller
+                name="keyword"
+                control={control}
+                defaultValue=""
+                render={({ field }) => (
+                  <KeywordAutocomplete id="tender-alert-keyword" value={field.value} onChange={field.onChange}
+                    onBlur={field.onBlur} placeholder="e.g. road construction" className="mt-1"
+                    fetchSuggestions={tenderService.keywordSuggestions} unit="tender" />
+                )}
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">Every word must appear in the tender title or organisation.</p>
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">State</label>
@@ -117,42 +132,46 @@ function TenderAlertPanel({ alerts, onCreate, onToggle, onDelete, showForm, setS
       ) : (
         <div className="space-y-3">
           {alerts.map(alert => (
-            <div key={alert.id} className="bg-white rounded-xl border border-border p-4 flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {alert.keyword && (
-                    <span className="text-sm font-medium">"{alert.keyword}"</span>
-                  )}
-                  {alert.state && (
-                    <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{alert.state}</span>
-                  )}
-                  {alert.category && (
-                    <span className="text-xs bg-muted px-2 py-0.5 rounded-full capitalize">{alert.category}</span>
-                  )}
-                  {alert.min_value && (
-                    <span className="text-xs bg-muted px-2 py-0.5 rounded-full">
-                      ₹{(Number(alert.min_value) / 100000).toFixed(1)}L+ value
-                    </span>
-                  )}
-                  {/* Fallback when the alert has no filters (matches every tender). */}
-                  {!alert.keyword && !alert.state && !alert.category && !alert.min_value && (
-                    <span className="text-sm text-muted-foreground">All tenders</span>
-                  )}
+            <div key={alert.id} className="bg-white rounded-xl border border-border p-4 space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {alert.keyword && (
+                      <span className="text-sm font-medium">"{alert.keyword}"</span>
+                    )}
+                    {alert.state && (
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{alert.state}</span>
+                    )}
+                    {alert.category && (
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded-full capitalize">{alert.category}</span>
+                    )}
+                    {alert.min_value && (
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded-full">
+                        ₹{(Number(alert.min_value) / 100000).toFixed(1)}L+ value
+                      </span>
+                    )}
+                    {/* Fallback when the alert has no filters (matches every tender). */}
+                    {!alert.keyword && !alert.state && !alert.category && !alert.min_value && (
+                      <span className="text-sm text-muted-foreground">All tenders</span>
+                    )}
+                  </div>
+                  <span className={`inline-flex items-center text-xs font-medium ${alert.is_active ? 'text-green-600' : 'text-gray-400'}`}>
+                    {alert.is_active ? '● Active' : '○ Paused'}
+                  </span>
                 </div>
-                <span className={`inline-flex items-center text-xs font-medium ${alert.is_active ? 'text-green-600' : 'text-gray-400'}`}>
-                  {alert.is_active ? '● Active' : '○ Paused'}
-                </span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => onToggle(alert)} title={alert.is_active ? 'Pause' : 'Activate'} className="p-1.5 rounded hover:bg-muted transition-colors">
+                    {alert.is_active
+                      ? <ToggleRight className="h-5 w-5 text-green-600" />
+                      : <ToggleLeft className="h-5 w-5 text-gray-400" />}
+                  </button>
+                  <button onClick={() => onDelete(alert.id)} title="Delete" className="p-1.5 rounded hover:bg-destructive/10 transition-colors">
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button onClick={() => onToggle(alert)} title={alert.is_active ? 'Pause' : 'Activate'} className="p-1.5 rounded hover:bg-muted transition-colors">
-                  {alert.is_active
-                    ? <ToggleRight className="h-5 w-5 text-green-600" />
-                    : <ToggleLeft className="h-5 w-5 text-gray-400" />}
-                </button>
-                <button onClick={() => onDelete(alert.id)} title="Delete" className="p-1.5 rounded hover:bg-destructive/10 transition-colors">
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </button>
-              </div>
+              {/* The open tenders this alert matches now. */}
+              <TenderAlertMatches alertId={alert.id} collapsible saves={tenderSaves} />
             </div>
           ))}
         </div>
@@ -310,6 +329,7 @@ export default function Alerts() {
   const [showForm, setShowForm] = useState(false)
   const { register, control, handleSubmit, reset, formState: { isSubmitting } } = useForm()
   const saves = useSavedJobs() // shared by every job alert's list of matching jobs
+  const tenderSaves = useSavedTenders() // shared by every tender alert's list of matching tenders
 
   // Fetch the correct alert type based on role.
   useEffect(() => {
@@ -363,7 +383,7 @@ export default function Alerts() {
   if (loading) return <div className="text-muted-foreground">Loading...</div>
 
   // Shared props passed to whichever panel is rendered.
-  const panelProps = { alerts, onCreate, onToggle, onDelete, showForm, setShowForm, isSubmitting, register, control, handleSubmit, reset, saves }
+  const panelProps = { alerts, onCreate, onToggle, onDelete, showForm, setShowForm, isSubmitting, register, control, handleSubmit, reset, saves, tenderSaves }
 
   return isContractor
     ? <TenderAlertPanel {...panelProps} />

@@ -9,7 +9,7 @@
  * floated as an absolutely-positioned overlay). Holds a "Sign In" link
  * (signed-out only) and the hamburger button on the right; tapping the
  * hamburger opens a small dropdown panel listing the destinations that
- * used to be their own bottom tabs — Profile and Alerts — plus Saved Jobs and Settings.
+ * used to be their own bottom tabs — Profile and Alerts — plus Saved Jobs, Saved Tenders and Settings.
  * Each is registered as a root-stack screen (see `navigation/index.tsx`),
  * so `useNavigation()` here (resolving to the root stack, since this
  * component sits alongside, not inside, the Tab.Navigator) can navigate
@@ -30,6 +30,7 @@ import { BorderRadius, Spacing } from '@/theme/spacing';
 const MENU_ITEMS: { label: string; route: string; icon: string }[] = [
   { label: 'Profile', route: 'Profile', icon: 'person-outline' },
   { label: 'Saved Jobs', route: 'SavedJobs', icon: 'bookmark-outline' },
+  { label: 'Saved Tenders', route: 'SavedTenders', icon: 'document-text-outline' },
   { label: 'Alerts', route: 'Alerts', icon: 'notifications-outline' },
   { label: 'Settings', route: 'Settings', icon: 'settings-outline' },
 ];

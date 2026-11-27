@@ -7,8 +7,9 @@
  * jobs. Keyboard: ↓/↑ move through suggestions, Enter picks the highlighted one,
  * Escape closes the list. Free text is always allowed.
  *
- * Used for the job alert form's "Role / Keyword" field on pages/seeker/Alerts.jsx
- * (bound to React Hook Form via `Controller`).
+ * Used for the job alert form's "Role / Keyword" field and the tender alert form's
+ * "Keyword" field on pages/seeker/Alerts.jsx (bound to React Hook Form via
+ * `Controller`); tender alerts pass `fetchSuggestions` to suggest from tender titles.
  */
 import { useEffect, useId, useRef, useState } from 'react'
 import { seekerService } from '@/services/seekerService'
@@ -25,8 +26,14 @@ const MIN_CHARS = 2     // the API suggests nothing for shorter text
  * - value (string) / onChange (function(string)) — the field's text (controlled).
  * - onBlur (function, optional) — passed through (React Hook Form touch tracking).
  * - id, placeholder, className (optional) — forwarded to the input.
+ * - fetchSuggestions (function(q) => Promise<{data: [{keyword, count}]}>, optional) —
+ *   where suggestions come from; defaults to job titles (seekerService.keywordSuggestions).
+ * - unit (string, default 'job') — what `count` counts, shown as "66 jobs" / "12 tenders".
  */
-export function KeywordAutocomplete({ value = '', onChange, onBlur, id, placeholder, className }) {
+export function KeywordAutocomplete({
+  value = '', onChange, onBlur, id, placeholder, className,
+  fetchSuggestions = seekerService.keywordSuggestions, unit = 'job',
+}) {
   const listId = useId()
   const [suggestions, setSuggestions] = useState([]) // [{keyword, count}] for the current text
   const [open, setOpen] = useState(false)
@@ -43,7 +50,7 @@ export function KeywordAutocomplete({ value = '', onChange, onBlur, id, placehol
     }
     const timer = setTimeout(() => {
       latestRef.current = q
-      seekerService.keywordSuggestions(q)
+      fetchSuggestions(q)
         .then(({ data }) => {
           if (latestRef.current !== q) return
           // Nothing to suggest if the only option is exactly what's typed.
@@ -55,7 +62,7 @@ export function KeywordAutocomplete({ value = '', onChange, onBlur, id, placehol
         .catch(() => setSuggestions([]))
     }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [value])
+  }, [value, fetchSuggestions])
 
   /** Put a suggestion in the box and close the list. */
   const pick = (keyword) => {
@@ -118,7 +125,7 @@ export function KeywordAutocomplete({ value = '', onChange, onBlur, id, placehol
                 i === active ? 'bg-muted' : 'hover:bg-muted/60')}
             >
               <span className="truncate">{s.keyword}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">{s.count.toLocaleString('en-IN')} job{s.count === 1 ? '' : 's'}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{s.count.toLocaleString('en-IN')} {unit}{s.count === 1 ? '' : 's'}</span>
             </li>
           ))}
         </ul>

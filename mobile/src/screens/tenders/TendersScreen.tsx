@@ -19,6 +19,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ScreenWrapper } from '@/components/common/ScreenWrapper';
 import { MembersOnly } from '@/components/common/MembersOnly';
 import { useAuth } from '@/hooks/useAuth';
+import { useSavedTenders } from '@/hooks/useSavedTenders';
 import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
@@ -67,6 +68,7 @@ export function TendersScreen({ navigation }: { navigation: any }) {
   // Scraped tenders are members-only (the API 401s guests); fetches below wait for a
   // token and re-run when the user signs in from the prompt.
   const { isAuthenticated } = useAuth();
+  const { canSave, isSaved, isPending, toggleSave } = useSavedTenders(); // bookmark toggles on the cards
 
   // Fetches the distinct-states list once signed in to populate the "All
   // States" picker (see `tenderService.states()` — curated against a known
@@ -147,6 +149,7 @@ export function TendersScreen({ navigation }: { navigation: any }) {
               // List item press: navigate to TenderDetailScreen with the
               // tapped tender's id as a route param
               onPress={() => navigation.navigate('TenderDetail', { tenderId: item.id })}
+              save={canSave ? { saved: isSaved(item.id), pending: isPending(item.id), onToggle: () => toggleSave(item.id) } : null}
             />
           )}
           // Empty state shown when the search/fetch returns no results

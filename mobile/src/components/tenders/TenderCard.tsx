@@ -9,6 +9,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
+import { SaveJobButton } from '@/components/jobs/SaveJobButton';
 import { Badge } from '@/components/common/Badge';
 
 /**
@@ -40,6 +41,10 @@ interface Props {
     submission_deadline?: string;
   };
   onPress: () => void;
+  /** Optional bookmark toggle `{ saved, pending, onToggle }` (omitted for guests/company accounts). */
+  save?: { saved: boolean; pending?: boolean; onToggle: () => void } | null;
+  /** Shows "Closed" instead of the deadline (a saved tender whose bidding has ended). */
+  closed?: boolean;
 }
 
 /**
@@ -52,7 +57,7 @@ interface Props {
  *
  * Props: see `Props` interface above.
  */
-export function TenderCard({ tender, onPress }: Props) {
+export function TenderCard({ tender, onPress, save, closed = false }: Props) {
   const Colors = useThemeColors();
   const styles = makeStyles(Colors);
   // Format the raw ISO deadline into a localized "D Mon YYYY" string for
@@ -73,19 +78,24 @@ export function TenderCard({ tender, onPress }: Props) {
     // Card press -> fires onPress, which the caller wires up to navigate
     // to TenderDetailScreen (e.g. navigation.navigate('TenderDetail', { id: tender.id })).
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
-      <Text style={styles.title} numberOfLines={2}>{tender.title}</Text>
+      <View style={styles.header}>
+        <Text style={styles.title} numberOfLines={2}>{tender.title}</Text>
+        {save && <SaveJobButton noun="tender" {...save} />}
+      </View>
       <Text style={styles.org}>{tender.organisation}</Text>
       <Text style={styles.state}>{tender.state}</Text>
       <View style={styles.footer}>
         <Badge label={tender.category} />
-        {/* Deadline is optional in the API — only shown when submission_deadline
-            was provided. Styling switches to the urgent/error variant when
-            isExpiringSoon is true (deadline within 3 days or passed). */}
-        {deadline && (
+        {/* "Closed" for a saved tender whose bidding has ended; otherwise the deadline
+            when the API gave one, in the urgent/error style when isExpiringSoon
+            (deadline within 3 days or passed). */}
+        {closed ? (
+          <Text style={styles.closed}>Closed</Text>
+        ) : deadline ? (
           <Text style={[styles.deadline, isExpiringSoon && styles.deadlineUrgent]}>
             Due: {deadline}
           </Text>
-        )}
+        ) : null}
       </View>
       {/* Estimated value is optional in the API — only shown when present.
           Converted from rupees to lakhs (÷100000) and shown as e.g. "Est. value: ₹5.0L". */}
@@ -107,7 +117,9 @@ const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  title: { fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.text },
+  header: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing[2] },
+  title: { flex: 1, fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.text },
+  closed: { fontSize: FontSize.xs, fontWeight: FontWeight.medium, color: Colors.textSecondary },
   org: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 4 },
   state: { fontSize: FontSize.sm, color: Colors.textMuted, marginTop: 2 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing[3] },

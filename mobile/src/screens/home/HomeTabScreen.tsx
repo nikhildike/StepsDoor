@@ -14,7 +14,10 @@
  *
  * Signed-in job seekers also get their dashboard at the top of the feed
  * (`SeekerSummary`: Saved Jobs / Active Alerts / New Jobs Today cards and the
- * newest jobs matching their alerts), shown even when the feed is empty.
+ * newest jobs matching their alerts), and contractors theirs (`ContractorSummary`:
+ * New Today / Saved Tenders / Tender Alerts and the tenders matching their
+ * alerts) — shown even when the feed is empty. Each renders nothing for other
+ * accounts. Tender cards here have bookmark toggles.
  *
  * Unlike the old job-only search, typing here searches *every* browsable
  * section at once — Jobs (API), Tenders (API), and the static Shopping
@@ -33,6 +36,8 @@ import { useJobs } from '@/hooks/useJobs';
 import { useAuth } from '@/hooks/useAuth';
 import { MembersOnly } from '@/components/common/MembersOnly';
 import { SeekerSummary } from '@/components/home/SeekerSummary';
+import { ContractorSummary } from '@/components/home/ContractorSummary';
+import { useSavedTenders } from '@/hooks/useSavedTenders';
 import { JobCard } from '@/components/jobs/JobCard';
 import { TenderCard } from '@/components/tenders/TenderCard';
 import { ALL_STORES, ALL_RETAIL_STORES, StoreEntry } from '@/screens/shopping/ShoppingScreen';
@@ -232,6 +237,11 @@ export function HomeTabScreen() {
   // instead of the default jobs/stores/offers feed.
   const { user, isAuthenticated } = useAuth();
   const isContractor = !!user?.is_contractor;
+  // Bookmark toggles on tender cards (search results and the contractor feed).
+  const savedTenders = useSavedTenders();
+  const tenderSave = (id: number) => (savedTenders.canSave
+    ? { saved: savedTenders.isSaved(id), pending: savedTenders.isPending(id), onToggle: () => savedTenders.toggleSave(id) }
+    : null);
 
   // Tender search results — fetched from the API whenever the shared
   // search text changes and is non-empty (mirrors TendersScreen's own
@@ -388,7 +398,7 @@ export function HomeTabScreen() {
               <View style={styles.section}>
                 <Text style={styles.sectionHeading}>Tenders ({tenderResults.length})</Text>
                 {tenderResults.map((tender) => (
-                  <TenderCard key={tender.id} tender={tender} onPress={() => openTender(tender.id)} />
+                  <TenderCard key={tender.id} tender={tender} onPress={() => openTender(tender.id)} save={tenderSave(tender.id)} />
                 ))}
               </View>
             )}
@@ -404,9 +414,11 @@ export function HomeTabScreen() {
         )
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
-          {/* Job seeker dashboard (stat cards + jobs matching their alerts). Above the
-              feed and outside its loading/empty states, so it always shows. */}
+          {/* Dashboards (stat cards + listings matching their alerts): job seekers get
+              SeekerSummary, contractors ContractorSummary. Above the feed and outside its
+              loading/empty states, so they always show. */}
           <SeekerSummary />
+          <ContractorSummary />
           {feedLoading ? (
             <Spinner />
           ) : !hasFeedContent ? (
@@ -424,7 +436,7 @@ export function HomeTabScreen() {
               <View style={styles.section}>
                 <Text style={styles.sectionHeading}>New Tenders</Text>
                 {latestTenders.map((tender) => (
-                  <TenderCard key={tender.id} tender={tender} onPress={() => openTender(tender.id)} />
+                  <TenderCard key={tender.id} tender={tender} onPress={() => openTender(tender.id)} save={tenderSave(tender.id)} />
                 ))}
               </View>
             )

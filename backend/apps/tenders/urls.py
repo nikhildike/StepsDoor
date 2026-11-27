@@ -7,7 +7,7 @@ DRF routers registered on the same router instance.
 """
 from django.urls import path, include
 from rest_framework.routers import SimpleRouter
-from .views import TenderViewSet, TenderAlertViewSet
+from .views import SavedTenderViewSet, TenderAlertViewSet, TenderStatsView, TenderViewSet
 
 router = SimpleRouter()
 # GET  /            -> list active tenders (filterable/searchable/orderable, auth required)
@@ -20,9 +20,13 @@ router = SimpleRouter()
 # GET    /alerts/<id>/     -> retrieve one of the current user's alerts (auth required)
 # PUT/PATCH /alerts/<id>/  -> update one of the current user's alerts (auth required)
 # DELETE /alerts/<id>/     -> delete one of the current user's alerts (auth required)
+# GET    /alerts/<id>/matches/, /alerts/matches/, /alerts/suggestions/?q= -> matching tenders, keyword autocomplete
 router.register(r'alerts', TenderAlertViewSet, basename='tender-alert')
+# GET/POST /saved/, DELETE /saved/<id>/ -> the current user's saved tenders (also before '')
+router.register(r'saved', SavedTenderViewSet, basename='saved-tender')
 router.register(r'', TenderViewSet, basename='tender')
 
 urlpatterns = [
+    path('stats/', TenderStatsView.as_view(), name='tender-stats'),  # contractor dashboard counts (before the <pk>/ route)
     path('', include(router.urls)),
 ]

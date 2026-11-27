@@ -23,6 +23,8 @@ import { Spinner } from '@/components/ui/Spinner'
 import { formatDate } from '@/utils/formatDate'
 import { deadlineInfo, DEADLINE_BADGE } from '@/utils/deadline'
 import { useListingPrefix } from '@/hooks/useDashboardBase'
+import { useSavedTenders } from '@/hooks/useSavedTenders'
+import { SaveJobButton } from '@/components/jobs/SaveJobButton'
 
 // Mirrors backend apps.tenders.models.TenderCategory.
 const CATEGORIES = [
@@ -57,8 +59,12 @@ function formatINR(amount) {
  * One tender row: title links to /tenders/:id (or /seeker/tenders/:id in the dashboard,
  * via `prefix`), a closing-date badge, then organisation, location, value, bid
  * opening date and category.
+ * - `save` ({saved, pending, onToggle}, optional): adds a bookmark toggle.
+ * - `closed` (boolean, optional): shows a "Closed" badge instead of the deadline
+ *   (saved tenders whose bidding has ended).
+ * Exported for the Saved Tenders page and tender alert matches.
  */
-function TenderRow({ tender, prefix }) {
+export function TenderRow({ tender, prefix, save, closed = false }) {
   const value = formatINR(tender.estimated_value)
   const deadline = deadlineInfo(tender.submission_deadline)
   return (
@@ -68,11 +74,16 @@ function TenderRow({ tender, prefix }) {
     >
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-medium text-foreground line-clamp-2">{tender.title}</p>
-        {deadline && (
-          <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${DEADLINE_BADGE[deadline.urgency]}`}>
-            {deadline.label}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {closed ? (
+            <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">Closed</span>
+          ) : deadline && (
+            <span className={`rounded px-2 py-0.5 text-xs font-medium ${DEADLINE_BADGE[deadline.urgency]}`}>
+              {deadline.label}
+            </span>
+          )}
+          {save && <SaveJobButton noun="tender" {...save} />}
+        </div>
       </div>
       <p className="mt-1 text-xs text-muted-foreground line-clamp-1">{tender.organisation}</p>
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
@@ -99,6 +110,7 @@ function TenderRow({ tender, prefix }) {
  */
 export function LatestTenders() {
   const { token } = useAuthStore()
+  const { canSave, isSaved, isPending, toggleSave } = useSavedTenders() // bookmark toggles on the rows
   const prefix = useListingPrefix() // '/seeker' inside the dashboard, so detail links stay in it
   const [searchParams, setSearchParams] = useSearchParams()
   const urlSearch = searchParams.get('search') || '' // keyword from the URL (?search=...)
@@ -189,7 +201,14 @@ export function LatestTenders() {
         <>
           <p className="mb-3 text-xs text-muted-foreground">{total.toLocaleString('en-IN')} open tender{total === 1 ? '' : 's'}</p>
           <div className={`space-y-3 ${loading ? 'opacity-60' : ''}`}>
-            {result.results.map(t => <TenderRow key={t.id} tender={t} prefix={prefix} />)}
+            {result.results.map(t => (
+              <TenderRow
+                key={t.id}
+                tender={t}
+                prefix={prefix}
+                save={canSave ? { saved: isSaved(t.id), pending: isPending(t.id), onToggle: () => toggleSave(t.id) } : null}
+              />
+            ))}
           </div>
           {pages > 1 && (
             <div className="mt-6 flex items-center justify-center gap-3 text-sm">

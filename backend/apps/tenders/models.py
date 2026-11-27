@@ -300,3 +300,34 @@ class ContractorProfile(models.Model):
     def __str__(self):
         """Human-readable label for Django admin lists, e.g. "Sharma Constructions Pvt. Ltd. (user@example.com)"."""
         return f"{self.firm_name} ({self.contact_email})"
+
+
+class SavedTender(models.Model):
+    """A tender a user bookmarked to come back to (usually a contractor preparing a bid).
+
+    Created when the user taps the bookmark on a tender card or the tender's page;
+    backs the Saved Tenders page (web `/seeker/saved-tenders`, mobile SavedTendersScreen)
+    and the contractor dashboard's count. Tenders that close stay saved (shown as closed).
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,  # bookmarks go with the account
+        related_name='saved_tenders',
+    )
+    tender = models.ForeignKey(
+        Tender,
+        on_delete=models.CASCADE,  # a deleted tender (e.g. purge_legacy_listings) drops its bookmarks
+        related_name='saved_by',
+    )
+    saved_at = models.DateTimeField(auto_now_add=True)  # when it was bookmarked; the list is newest first
+
+    class Meta:
+        ordering = ['-saved_at']
+        constraints = [
+            # Saving twice returns the existing bookmark (SavedTenderViewSet.create).
+            models.UniqueConstraint(fields=['user', 'tender'], name='savedtender_unique_user_tender'),
+        ]
+
+    def __str__(self):
+        """Admin label: who saved which tender."""
+        return f'{self.user} saved {self.tender}'

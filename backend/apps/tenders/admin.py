@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.shortcuts import render, redirect
 from django.urls import path
 from import_export.admin import ImportExportModelAdmin
-from .models import Tender, TenderAlert, ScraperLog, ScraperSource, ContractorProfile
+from .models import Tender, TenderAlert, ScraperLog, ScraperSource, ContractorProfile, SavedTender
 from .resources import TenderResource, ScraperSourceResource
 
 
@@ -170,3 +170,11 @@ class ScraperSourceAdmin(ImportExportModelAdmin):
         skipped = queryset.filter(is_active=False).count()
         if skipped:
             self.message_user(request, f'{skipped} inactive source(s) skipped.', messages.WARNING)
+
+
+@admin.register(SavedTender)
+class SavedTenderAdmin(admin.ModelAdmin):
+    """Read-mostly list of who bookmarked which tender (support/debugging)."""
+    list_display = ['user', 'tender', 'saved_at']
+    search_fields = ['user__email', 'user__username', 'tender__title', 'tender__tender_id']
+    raw_id_fields = ['user', 'tender']

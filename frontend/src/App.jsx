@@ -43,6 +43,7 @@ import CompanyProfile from '@/pages/company/Profile'
 // Seeker pages
 import SeekerOverview from '@/pages/seeker/Overview'
 import SavedJobs from '@/pages/seeker/SavedJobs'
+import SavedTenders from '@/pages/seeker/SavedTenders'
 import Alerts from '@/pages/seeker/Alerts'
 import SeekerProfile from '@/pages/seeker/Profile'
 
@@ -195,6 +196,7 @@ export default function App() {
         <Route index element={<SeekerOverview />} />
         {/* List of jobs the seeker has bookmarked/saved — guard: authenticated (inherited) */}
         <Route path="saved" element={<SavedJobs />} />
+        <Route path="saved-tenders" element={<SavedTenders />} />
         {/* Manage job/tender alert subscriptions — guard: authenticated (inherited) */}
         <Route path="alerts" element={<Alerts />} />
         {/* Edit profile — guard: authenticated (inherited) */}

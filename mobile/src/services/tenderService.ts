@@ -54,4 +54,45 @@ export const tenderService = {
    * @remarks Used by the seeker's Alerts screen.
    */
   deleteAlert: (id: number) => api.delete(`/tenders/alerts/${id}/`),
+  /** Update a tender alert (e.g. `{ is_active: false }` to pause it). Used by AlertsScreen. */
+  updateAlert: (id: number, data: object) => api.patch(`/tenders/alerts/${id}/`, data),
+  /**
+   * Open tenders matching one tender alert, soonest closing first (same rules as the daily email).
+   * @param params - `{ limit }` (default 20, max 50).
+   * @returns Axios response with `{ count, results: [tender list fields] }`.
+   * @remarks Used by `components/tenders/TenderMatchesList.tsx`.
+   */
+  alertMatches: (id: number, params?: { limit?: number }) => api.get(`/tenders/alerts/${id}/matches/`, { params }),
+  /** Open tenders matching any active tender alert, each once. Same shape as `alertMatches`. */
+  allAlertMatches: (params?: { limit?: number }) => api.get('/tenders/alerts/matches/', { params }),
+  /** Keyword suggestions from open tenders' titles: `[{ keyword, count }]`. Used by AlertsScreen's tender alert form. */
+  keywordSuggestions: (q: string) => api.get('/tenders/alerts/suggestions/', { params: { q } }),
+  /** The signed-in user's saved tenders: `[{ id, tender, saved_at, is_open, details }]`. */
+  saved: () => api.get('/tenders/saved/'),
+  /** Save a tender (idempotent). @param tenderId - The tender's id. */
+  save: (tenderId: number) => api.post('/tenders/saved/', { tender: tenderId }),
+  /** Remove a saved tender. @param savedId - The bookmark's id (not the tender's). */
+  unsave: (savedId: number) => api.delete(`/tenders/saved/${savedId}/`),
+  /** Contractor dashboard counts: `{ saved_tenders, active_alerts, alert_matches, new_today, open_tenders }`. */
+  stats: () => api.get('/tenders/stats/'),
 };
+
+// One saved tender (SavedTenderSerializer): the bookmark plus the tender's list fields.
+export interface SavedTender {
+  id: number; // the bookmark's id (used to unsave)
+  tender: number; // the tender's id
+  saved_at: string;
+  is_open: boolean; // false once bidding has ended
+  details: TenderSummary;
+}
+
+// The tender fields cards render (TenderListSerializer subset).
+export interface TenderSummary {
+  id: number;
+  title: string;
+  organisation: string;
+  state: string;
+  category: string;
+  estimated_value?: number;
+  submission_deadline?: string;
+}

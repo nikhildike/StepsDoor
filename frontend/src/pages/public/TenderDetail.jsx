@@ -11,10 +11,11 @@ import { useEffect, useState } from 'react'
 import { useListingPrefix } from '@/hooks/useDashboardBase'
 import { useParams, Link } from 'react-router-dom'
 import { tenderService } from '@/services/tenderService'
+import { useSavedTenders } from '@/hooks/useSavedTenders'
 import { Spinner } from '@/components/ui/Spinner'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { ExternalLink, ArrowLeft, Calendar, MapPin, IndianRupee, Building2, Copy, Check, Hash, FileText } from 'lucide-react'
+import { ExternalLink, ArrowLeft, Bookmark, Calendar, MapPin, IndianRupee, Building2, Copy, Check, Hash, FileText } from 'lucide-react'
 
 // Tender category value -> display label (mirrors the backend Tender.category choices)
 const CATEGORIES = [
@@ -84,6 +85,7 @@ function CopyBtn({ text, label }) {
  */
 export default function TenderDetail() {
   const { id } = useParams() // tender id from the /tenders/:id route
+  const { canSave, isSaved, isPending, toggleSave } = useSavedTenders() // "Save tender" button
   // '/seeker' when opened inside the dashboard, so "Back" returns to the dashboard list.
   const prefix = useListingPrefix()
   const [tender, setTender] = useState(null)
@@ -174,6 +176,13 @@ export default function TenderDetail() {
           {tender.document_url && (
             <Button variant="outline" href={tender.document_url} target="_blank" rel="noopener noreferrer">
               Download Document <ExternalLink className="h-4 w-4" />
+            </Button>
+          )}
+          {canSave && (
+            <Button variant="outline" onClick={() => toggleSave(tender.id)} disabled={isPending(tender.id)}
+              aria-pressed={isSaved(tender.id)}>
+              <Bookmark className={`h-4 w-4 ${isSaved(tender.id) ? 'fill-primary text-primary' : ''}`} />
+              {isSaved(tender.id) ? 'Saved' : 'Save tender'}
             </Button>
           )}
         </div>

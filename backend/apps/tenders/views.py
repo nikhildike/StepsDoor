@@ -2,19 +2,22 @@
 DRF views for the `tenders` app's API.
 
 Provides the members-only tender-browsing endpoints (free, but scraped data is shown to
-logged-in users only — anonymous requests get 401) and the authenticated tender-alert
-management endpoints. Wired up via `urls.py`'s router.
+logged-in users only — anonymous requests get 401), the authenticated tender-alert
+endpoints (CRUD, matching tenders, keyword suggestions), saved tenders and the
+contractor dashboard stats. Wired up via `urls.py`.
 """
 from django.conf import settings
 from django.db.models import Count
-from rest_framework import viewsets, permissions
+from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.views import APIView
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
-from .models import Tender, TenderAlert
-from .serializers import TenderListSerializer, TenderDetailSerializer, TenderAlertSerializer
+from .listings import collect_matches, keyword_suggestions, new_today_count, open_tenders
+from .models import SavedTender, Tender, TenderAlert
+from .serializers import SavedTenderSerializer, TenderListSerializer, TenderDetailSerializer, TenderAlertSerializer
 
 
 class TenderViewSet(viewsets.ReadOnlyModelViewSet):
@@ -104,3 +107,79 @@ class TenderAlertViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Force-assign the authenticated user as owner on create, ignoring any client-supplied user field."""
         serializer.save(user=self.request.user)
+
+    def _limit(self, request):
+        """`?limit=` (default 20, capped at 50): how many matching tenders to list."""
+        try:
+            return max(1, min(int(request.query_params.get('limit', 20)), 50))
+        except ValueError:
+            return 20
+
+    def _matches_response(self, alerts, limit):
+        """{count, results: [tender list fields]} for the open tenders matching `alerts`."""
+        matches = collect_matches(alerts, limit)
+        return Response({'count': matches['count'], 'results': TenderListSerializer(matches['results'], many=True).data})
+
+    @action(detail=True)
+    def matches(self, request, pk=None):
+        """GET /api/tenders/alerts/{id}/matches/ — open tenders this alert matches, soonest closing first.
+
+        Same matching as the daily digest (`apps.tenders.listings.alert_match_queryset`).
+        Works for paused alerts too, so a user can preview one before switching it on.
+        """
+        return self._matches_response([self.get_object()], self._limit(request))
+
+    @action(detail=False, url_path='matches')
+    def all_matches(self, request):
+        """GET /api/tenders/alerts/matches/ — open tenders matching any active alert, each once (dashboard)."""
+        return self._matches_response(list(self.get_queryset().filter(is_active=True)), self._limit(request))
+
+    @action(detail=False)
+    def suggestions(self, request):
+        """GET /api/tenders/alerts/suggestions/?q=road — keywords from open tenders' titles: [{keyword, count}]."""
+        return Response(keyword_suggestions(request.query_params.get('q', '')))
+
+
+class SavedTenderViewSet(mixins.ListModelMixin, mixins.CreateModelMixin, mixins.DestroyModelMixin,
+                         viewsets.GenericViewSet):
+    """The signed-in user's saved tenders (`/api/tenders/saved/`): list, save, unsave.
+
+    POST `{tender: <id>}` is idempotent: saving a tender that's already saved returns
+    the existing bookmark with 200 (new ones 201). DELETE uses the bookmark's id.
+    Used by the tender cards' bookmark toggle and the Saved Tenders page (web, mobile).
+    """
+    serializer_class = SavedTenderSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None  # a personal list; the clients render it whole
+
+    def get_queryset(self):
+        """Only the requesting user's bookmarks, newest first."""
+        return SavedTender.objects.filter(user=self.request.user).select_related('tender')
+
+    def create(self, request, *args, **kwargs):
+        """Save a tender, or return the existing bookmark if it's already saved."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        saved, created = SavedTender.objects.get_or_create(user=request.user, tender=serializer.validated_data['tender'])
+        return Response(self.get_serializer(saved).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class TenderStatsView(APIView):
+    """GET /api/tenders/stats/ — the numbers on the contractor dashboard's stat cards.
+
+    Returns {saved_tenders, active_alerts, alert_matches (open tenders matching any
+    active alert, each once), new_today (open tenders first scraped since midnight
+    IST), open_tenders}. Used by the web contractor dashboard and the mobile Home tab.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """Compute the counts for the requesting user."""
+        alerts = list(TenderAlert.objects.filter(user=request.user, is_active=True))
+        return Response({
+            'saved_tenders': SavedTender.objects.filter(user=request.user).count(),
+            'active_alerts': len(alerts),
+            'alert_matches': collect_matches(alerts, limit=0)['count'] if alerts else 0,
+            'new_today': new_today_count(),
+            'open_tenders': open_tenders().count(),
+        })

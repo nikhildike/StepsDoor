@@ -27,16 +27,24 @@ const MAX_SHOWN = 6;     // keep the list short on a phone
  * Props for `KeywordInput`.
  * - `value` / `onChangeText`: the field's text (controlled by the screen).
  * - `label`, `placeholder`: passed to the underlying Input.
+ * - `fetchSuggestions`: where suggestions come from; defaults to job titles
+ *   (`seekerService.keywordSuggestions`). Tender alerts pass `tenderService.keywordSuggestions`.
+ * - `unit`: what `count` counts, shown as "66 jobs" / "12 tenders" (default 'job').
  */
 interface Props {
   value: string;
   onChangeText: (text: string) => void;
   label?: string;
   placeholder?: string;
+  fetchSuggestions?: (q: string) => Promise<{ data: { keyword: string; count: number }[] }>;
+  unit?: string;
 }
 
-/** KeywordInput — see `Props`. */
-export function KeywordInput({ value, onChangeText, label, placeholder }: Props) {
+/** KeywordInput — see `Props`. Used by the job and tender alert forms. */
+export function KeywordInput({
+  value, onChangeText, label, placeholder,
+  fetchSuggestions = seekerService.keywordSuggestions, unit = 'job',
+}: Props) {
   const Colors = useThemeColors();
   const styles = makeStyles(Colors);
   const [suggestions, setSuggestions] = useState<{ keyword: string; count: number }[]>([]);
@@ -52,7 +60,7 @@ export function KeywordInput({ value, onChangeText, label, placeholder }: Props)
     }
     const timer = setTimeout(() => {
       latestRef.current = q;
-      seekerService.keywordSuggestions(q)
+      fetchSuggestions(q)
         .then(({ data }) => {
           if (latestRef.current !== q) return;
           // Nothing to suggest if the only option is exactly what's typed.
@@ -62,7 +70,7 @@ export function KeywordInput({ value, onChangeText, label, placeholder }: Props)
         .catch(() => setSuggestions([]));
     }, DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [value]);
+  }, [value, fetchSuggestions]);
 
   /** Fill the field with a suggestion and hide the list. */
   const pick = (keyword: string) => {
@@ -84,9 +92,9 @@ export function KeywordInput({ value, onChangeText, label, placeholder }: Props)
         <View style={styles.list} accessibilityRole="list">
           {suggestions.map((s, i) => (
             <TouchableOpacity key={s.keyword} style={[styles.row, i > 0 && styles.rowBorder]} onPress={() => pick(s.keyword)}
-              accessibilityRole="button" accessibilityLabel={`Use ${s.keyword}, ${s.count} jobs`}>
+              accessibilityRole="button" accessibilityLabel={`Use ${s.keyword}, ${s.count} ${unit}s`}>
               <Text style={styles.keyword} numberOfLines={1}>{s.keyword}</Text>
-              <Text style={styles.count}>{s.count.toLocaleString('en-IN')} job{s.count === 1 ? '' : 's'}</Text>
+              <Text style={styles.count}>{s.count.toLocaleString('en-IN')} {unit}{s.count === 1 ? '' : 's'}</Text>
             </TouchableOpacity>
           ))}
         </View>

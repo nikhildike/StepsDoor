@@ -11,9 +11,11 @@
  * (`AlertMatches`); a saved-jobs preview; govt jobs closing soon; and the latest
  * StepsDoor job openings.
  *
- * Contractors see: New Tenders count, Tender Alerts count, Open Tenders count,
- * a recent-tenders preview, and a tender-alerts preview — all job-seeker-specific
- * widgets are hidden for them.
+ * Contractors see: stat cards from GET /api/tenders/stats/ — New Today, Saved
+ * Tenders, Tender Alerts (with how many open tenders they match) and Open
+ * Tenders — each linking to its page; "Tenders matching your alerts"
+ * (`TenderAlertMatches`); and a recent-tenders preview. Job-seeker widgets are
+ * hidden for them.
  */
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -27,6 +29,8 @@ import { useAuthStore } from '@/store/authStore'
 import { formatDate } from '@/utils/formatDate'
 import { AlertMatches } from '@/components/alerts/AlertMatches'
 import { useSavedJobs } from '@/hooks/useSavedJobs'
+import { useSavedTenders } from '@/hooks/useSavedTenders'
+import { TenderAlertMatches } from '@/components/tenders/TenderAlertMatches'
 
 // Maps backend job_type enum values to human-readable labels for display.
 const JOB_TYPE_LABELS = {
@@ -35,14 +39,15 @@ const JOB_TYPE_LABELS = {
 }
 
 /**
- * Renders the contractor's personalized dashboard: tender stat cards, a
- * recent-tenders preview table, and a tender-alerts preview. Replaces all
- * job-seeker-specific content (Saved Jobs, New Jobs Today, etc.) when the
- * logged-in user has `is_contractor = true`.
+ * Renders the contractor's dashboard: stat cards from GET /api/tenders/stats/
+ * (each linking to its page), "Tenders matching your alerts", and the most
+ * recent tenders.
  *
- * @param {{ name: string, tenders: Array, tenderAlerts: Array }} props
+ * @param {{ name: string, stats: object|null, tenders: Array }} props
+ *   `stats` is the /tenders/stats/ response (null while loading or if it failed).
  */
-function ContractorDashboard({ name, tenders, tenderAlerts }) {
+function ContractorDashboard({ name, stats, tenders }) {
+  const tenderSaves = useSavedTenders() // save toggles on the alert matches
   return (
     <div className="space-y-8">
       <div>
@@ -50,30 +55,33 @@ function ContractorDashboard({ name, tenders, tenderAlerts }) {
         <p className="text-muted-foreground mt-1">Here's the latest tender activity.</p>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-border p-6 flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-blue-500"><FileText className="h-6 w-6 text-white" /></div>
-          <div>
-            <p className="text-sm text-muted-foreground">New Tenders</p>
-            {/* tenders is capped at 5 by page_size; the "+" signals there may be more */}
-            <p className="text-2xl font-bold">{tenders.length > 0 ? `${tenders.length}+` : '0'}</p>
-          </div>
+      {/* Stat cards — each links to the page with the details. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard to="/seeker/tenders" icon={FileText} color="bg-blue-500" label="New Today"
+          value={stats?.new_today} note="Tenders added since midnight" />
+        <StatCard to="/seeker/saved-tenders" icon={Bookmark} color="bg-amber-500" label="Saved Tenders"
+          value={stats?.saved_tenders} note="Tap the bookmark on any tender" />
+        <StatCard to="/seeker/alerts" icon={Bell} color="bg-purple-500" label="Tender Alerts"
+          value={stats?.active_alerts}
+          note={stats?.active_alerts ? `${stats.alert_matches.toLocaleString('en-IN')} matching open tenders` : 'Save a keyword to track tenders'} />
+        <StatCard to="/seeker/tenders" icon={Briefcase} color="bg-green-500" label="Open Tenders"
+          value={stats?.open_tenders} note="Still accepting bids" />
+      </div>
+
+      {/* Tenders matching the contractor's active alerts (or a prompt to create one). */}
+      <div className="bg-white rounded-xl border border-border">
+        <div className="p-5 border-b flex items-center justify-between">
+          <h2 className="font-semibold flex items-center gap-2"><Bell className="h-4 w-4 text-primary" /> Tenders matching your alerts</h2>
+          <Link to="/seeker/alerts" className="text-sm text-primary hover:underline">Manage alerts</Link>
         </div>
-        <div className="bg-white rounded-xl border border-border p-6 flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-purple-500"><Bell className="h-6 w-6 text-white" /></div>
-          <div>
-            <p className="text-sm text-muted-foreground">Tender Alerts</p>
-            <p className="text-2xl font-bold">{tenderAlerts.filter(a => a.is_active !== false).length}</p>
+        {stats && stats.active_alerts === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            Save a keyword like &quot;road construction&quot; and every matching open tender shows up here.
+            <div className="mt-3"><Link to="/seeker/alerts" className="text-primary hover:underline">Create a tender alert →</Link></div>
           </div>
-        </div>
-        <div className="bg-white rounded-xl border border-border p-6 flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-green-500"><Briefcase className="h-6 w-6 text-white" /></div>
-          <div>
-            <p className="text-sm text-muted-foreground">Open Tenders</p>
-            <p className="text-2xl font-bold">{tenders.length > 0 ? `${tenders.length}+` : '0'}</p>
-          </div>
-        </div>
+        ) : (
+          <TenderAlertMatches limit={5} saves={tenderSaves} emptyText="No open tenders match your alerts yet." />
+        )}
       </div>
 
       {/* Recent tenders preview */}
@@ -113,35 +121,6 @@ function ContractorDashboard({ name, tenders, tenderAlerts }) {
           </div>
         )}
       </div>
-
-      {/* Tender alerts preview — only rendered when the contractor has at least one alert configured. */}
-      {tenderAlerts.length > 0 && (
-        <div className="bg-white rounded-xl border border-border">
-          <div className="p-5 border-b flex items-center justify-between">
-            <h2 className="font-semibold">Your Tender Alerts</h2>
-            <Link to="/seeker/alerts" className="text-sm text-primary hover:underline">Manage</Link>
-          </div>
-          <div className="divide-y">
-            {tenderAlerts.slice(0, 3).map(alert => (
-              <div key={alert.id} className="px-5 py-4 flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-sm">{alert.keyword || 'All tenders'}</p>
-                  {alert.state && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{alert.state}</p>
-                  )}
-                </div>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  alert.is_active !== false
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-500'
-                }`}>
-                  {alert.is_active !== false ? 'Active' : 'Paused'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -323,24 +302,23 @@ export default function SeekerOverview() {
   const [govtJobs, setGovtJobs] = useState([]) // open govt jobs with the nearest deadlines (seekers)
   // Contractor-only state.
   const [tenders, setTenders] = useState([])
-  const [tenderAlerts, setTenderAlerts] = useState([])
+  const [tenderStats, setTenderStats] = useState(null) // /tenders/stats/ counts for the contractor stat cards
   // True while the initial combined fetch is in flight.
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (isContractor) {
-      // Contractors need recent tenders and their tender alerts, not saved
-      // jobs or job listings. Profile is still fetched for the greeting name.
-      // Each request fails on its own (empty section) — one failing call used to blank the
-      // whole dashboard (e.g. "0 tenders" while /tenders/alerts/ was 404ing).
+      // Contractors need tender counts and recent tenders, not saved jobs or job
+      // listings. Profile is still fetched for the greeting name. Each request fails
+      // on its own (empty section) — one failing call must not blank the dashboard.
       Promise.all([
         seekerService.profile().catch(() => ({ data: null })),
         tenderService.list({ page_size: 5 }).catch(() => ({ data: [] })),
-        tenderService.alerts().catch(() => ({ data: [] })),
-      ]).then(([p, t, ta]) => {
+        tenderService.stats().catch(() => ({ data: null })),
+      ]).then(([p, t, st]) => {
         setProfile(p.data)
         setTenders(t.data.results ?? t.data)
-        setTenderAlerts(ta.data.results ?? ta.data)
+        setTenderStats(st.data)
       }).finally(() => setLoading(false))
     } else {
       // Job seekers: profile, stat-card counts, saved jobs, and recent job listings.
@@ -380,7 +358,7 @@ export default function SeekerOverview() {
   if (loading) return <div className="text-muted-foreground">Loading...</div>
 
   return isContractor ? (
-    <ContractorDashboard name={name} tenders={tenders} tenderAlerts={tenderAlerts} />
+    <ContractorDashboard name={name} stats={tenderStats} tenders={tenders} />
   ) : (
     <SeekerDashboard name={name} stats={stats} savedJobs={savedJobs} recentJobs={recentJobs} govtJobs={govtJobs} />
   )

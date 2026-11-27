@@ -10,8 +10,11 @@
  *   company careers pages and government jobs — under each alert
  *   (`AlertMatchesList`), each with save and apply. Backed by `/api/alerts/`.
  *   Mirrors the web Alerts page's job alert panel.
- * - Tender and Govt Job alerts: a read-only list (those alerts are created on
- *   the web or from the Tenders / Govt Jobs screens).
+ * - Tender Alerts (contractors): `TenderAlertsSection` — keyword (suggested from
+ *   open tender titles) and state, pause/delete, and each alert's matching
+ *   open tenders with bookmarks.
+ * - Other alerts (govt job alerts, and tender alerts of non-contractors): a
+ *   read-only list (created on the web or from the Govt Jobs screens).
  * Guests see the sign-in prompt.
  */
 import React, { useEffect, useState } from 'react';
@@ -23,6 +26,7 @@ import { seekerService, JobAlert } from '@/services/seekerService';
 import { useAuth } from '@/hooks/useAuth';
 import { AlertMatchesList } from '@/components/alerts/AlertMatchesList';
 import { KeywordInput } from '@/components/alerts/KeywordInput';
+import { TenderAlertsSection } from '@/components/tenders/TenderAlertsSection';
 import { Spinner } from '@/components/common/Spinner';
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
@@ -53,6 +57,8 @@ export function AlertsScreen({ navigation }: { navigation: any }) {
   const { isAuthenticated, user } = useAuth();
   // Job alerts are for job seekers; contractors and companies don't get the section.
   const showJobAlerts = !user?.is_contractor && !user?.is_company;
+  // Contractors manage their tender alerts (with matching tenders) in their own section.
+  const showTenderAlerts = !!user?.is_contractor;
 
   const [jobAlerts, setJobAlerts] = useState<JobAlert[]>([]);
   const [otherAlerts, setOtherAlerts] = useState<OtherAlert[]>([]);
@@ -120,6 +126,9 @@ export function AlertsScreen({ navigation }: { navigation: any }) {
     }
   };
 
+  // Tender alerts shown (editable) in TenderAlertsSection aren't repeated in the read-only list.
+  const readOnlyAlerts = showTenderAlerts ? otherAlerts.filter((a) => a.type !== 'tender') : otherAlerts;
+
   if (!isAuthenticated) return <MembersOnly what="your alerts" />;
   if (loading) return <Spinner />;
 
@@ -180,12 +189,13 @@ export function AlertsScreen({ navigation }: { navigation: any }) {
         </View>
       )}
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Tender & Govt Job Alerts</Text>
-        {otherAlerts.length === 0 ? (
-          <Text style={styles.detail}>None yet. Set them up from the Tenders or Government Jobs screens.</Text>
-        ) : (
-          otherAlerts.map((item) => (
+      {showTenderAlerts && <TenderAlertsSection navigation={navigation} />}
+
+      {/* Read-only: alerts this screen can't edit (the contractor's tender alerts are above). */}
+      {readOnlyAlerts.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{showTenderAlerts ? 'Govt Job Alerts' : 'Tender & Govt Job Alerts'}</Text>
+          {readOnlyAlerts.map((item) => (
             <View key={`${item.type}-${item.id}`} style={styles.card}>
               <View style={styles.badgeRow}>
                 <Badge label={item.type === 'tender' ? 'Tender Alert' : 'Govt Job Alert'}
@@ -195,9 +205,9 @@ export function AlertsScreen({ navigation }: { navigation: any }) {
               {item.category ? <Text style={styles.detail}>Category: {item.category}</Text> : null}
               {item.state ? <Text style={styles.detail}>State: {item.state}</Text> : null}
             </View>
-          ))
-        )}
-      </View>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }

@@ -14,6 +14,7 @@ import { Badge } from '@/components/common/Badge';
 import { ScreenWrapper } from '@/components/common/ScreenWrapper';
 import { MembersOnly } from '@/components/common/MembersOnly';
 import { useAuth } from '@/hooks/useAuth';
+import { useSavedTenders } from '@/hooks/useSavedTenders';
 import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { Spacing } from '@/theme/spacing';
@@ -37,6 +38,7 @@ export function TenderDetailScreen({ route }: { route: any }) {
   // tenderId changes, clearing the loading state once the request settles.
   // Members only (the API 401s guests): wait for a token; re-runs after signing in.
   const { isAuthenticated } = useAuth();
+  const { canSave, isSaved, isPending, toggleSave } = useSavedTenders(); // "Save tender" button
   useEffect(() => {
     if (!isAuthenticated) return;
     tenderService.get(tenderId).then(({ data }) => setTender(data)).finally(() => setLoading(false));
@@ -84,13 +86,25 @@ export function TenderDetailScreen({ route }: { route: any }) {
         {tender.description ? (
           <Text style={styles.description}>{tender.description}</Text>
         ) : null}
-        {/* Action button: opens the originating govt portal's tender page in
-            the device browser, only shown when the backend provides a URL */}
-        {tender.portal_url && (
+        {/* Action button: opens the originating govt portal in the device browser
+            (`source_url` — NIC detail pages expire with the portal session, so this
+            is the portal home), only shown when the backend provides a URL */}
+        {tender.source_url && (
           <View style={styles.actionButton}>
             <Button
               title="View on Portal →"
-              onPress={() => Linking.openURL(tender.portal_url)}
+              onPress={() => Linking.openURL(tender.source_url)}
+            />
+          </View>
+        )}
+        {/* Bookmark the tender to come back to it from Saved Tenders. */}
+        {canSave && (
+          <View style={styles.actionButton}>
+            <Button
+              variant="outline"
+              title={isSaved(tender.id) ? 'Saved ✓' : 'Save tender'}
+              loading={isPending(tender.id)}
+              onPress={() => toggleSave(tender.id)}
             />
           </View>
         )}

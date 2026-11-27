@@ -21,6 +21,9 @@ vi.mock('@/services/tenderService', () => ({
       },
     })),
     states: vi.fn(() => Promise.resolve({ data: [{ state: 'Assam', count: 12 }] })),
+    saved: vi.fn(() => Promise.resolve({ data: [] })),
+    save: vi.fn(() => Promise.resolve({ data: { id: 31 } })),
+    unsave: vi.fn(() => Promise.resolve({})),
   },
 }))
 
@@ -109,5 +112,17 @@ describe('Tenders page', () => {
     renderInRouter(<Tenders />)
     expect(screen.getByRole('tab', { name: 'Official portals' })).toHaveAttribute('aria-selected', 'true')
     expect(tenderService.list).toHaveBeenCalledTimes(1) // only the member render fetched
+  })
+})
+
+describe('saving tenders', () => {
+  it('saves a tender from its card, and the click does not open the tender', async () => {
+    useAuthStore.setState({ token: 'jwt', user: { is_contractor: true } })
+    renderInRouter(<><LatestTenders /><LocationProbe /></>)
+    await screen.findByText('Police Bungalow Campus Phase V')
+    await userEvent.click(screen.getByRole('button', { name: 'Save tender' }))
+    expect(tenderService.save).toHaveBeenCalledWith(564)
+    expect(await screen.findByRole('button', { name: 'Remove from saved' })).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/tenders')
   })
 })

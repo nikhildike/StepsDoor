@@ -13,6 +13,7 @@ jest.mock('@/services/tenderService', () => ({
   tenderService: {
     list: jest.fn(() => Promise.resolve({ data: { results: [] } })),
     states: jest.fn(() => Promise.resolve({ data: [] })),
+    saved: jest.fn(() => Promise.resolve({ data: [] })),
   },
 }));
 

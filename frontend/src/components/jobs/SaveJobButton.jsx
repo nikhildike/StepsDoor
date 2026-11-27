@@ -3,7 +3,8 @@
  *
  * Bookmark toggle for job cards that aren't StepsDoor posts (which use the
  * button built into JobCard): company careers openings, govt jobs and alert
- * matches. Same look as JobCard's bookmark — filled when saved.
+ * matches — and for tender cards (`noun="tender"`). Same look as JobCard's
+ * bookmark — filled when saved.
  *
  * Used by components/companies/LatestCompanyJobs, components/govtjobs/
  * LatestGovtJobs and components/alerts/AlertMatches, each wired to
@@ -19,15 +20,17 @@ import { Bookmark } from 'lucide-react'
  * - pending (boolean) — disables the button while a save/unsave request runs.
  * - onToggle (function) — called on click; the click doesn't bubble, so the
  *   button can sit inside a clickable card or link.
+ * - noun (string, default 'job') — what's being saved, for the label ("Save tender").
  */
-export function SaveJobButton({ saved, pending = false, onToggle }) {
+export function SaveJobButton({ saved, pending = false, onToggle, noun = 'job' }) {
+  const label = saved ? 'Remove from saved' : `Save ${noun}`
   return (
     <button
       type="button"
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle() }}
       disabled={pending}
-      title={saved ? 'Remove from saved' : 'Save job'}
-      aria-label={saved ? 'Remove from saved' : 'Save job'}
+      title={label}
+      aria-label={label}
       aria-pressed={saved}
       className="shrink-0 p-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
     >

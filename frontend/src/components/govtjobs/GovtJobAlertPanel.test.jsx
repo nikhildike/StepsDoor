@@ -24,7 +24,7 @@ vi.mock('@/services/seekerService', () => ({
   },
 }))
 vi.mock('@/services/tenderService', () => ({
-  tenderService: { alerts: vi.fn(() => Promise.resolve({ data: [] })) },
+  tenderService: { alerts: vi.fn(() => Promise.resolve({ data: [] })), saved: vi.fn(() => Promise.resolve({ data: [] })) },
 }))
 
 import { govtJobService } from '@/services/govtJobService'

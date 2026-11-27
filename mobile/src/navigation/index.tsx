@@ -12,7 +12,7 @@
  *    (Login → Register) is mounted as a screen the user can navigate to
  *    later (e.g. from the Profile screen's "Sign In" prompt) when they
  *    actually want to save jobs or set alerts.
- *  - Registers `Profile`, `SavedJobs`, `Alerts`, and `Settings` as root-stack screens
+ *  - Registers `Profile`, `SavedJobs`, `SavedTenders`, `Alerts`, and `Settings` as root-stack screens
  *    (not nested tabs) — they're reached via `BurgerMenu`'s dropdown
  *    (mounted inside `AppNavigator`) rather than the bottom tab bar, so
  *    they need to be navigable from anywhere without switching tabs.
@@ -32,6 +32,7 @@ import { SplashScreen } from '@/screens/auth/SplashScreen';
 import { ProfileScreen } from '@/screens/seeker/ProfileScreen';
 import { AlertsScreen } from '@/screens/seeker/AlertsScreen';
 import { SavedJobsScreen } from '@/screens/seeker/SavedJobsScreen';
+import { SavedTendersScreen } from '@/screens/seeker/SavedTendersScreen';
 import { SettingsScreen } from '@/screens/settings/SettingsScreen';
 import { useThemeColors } from '@/theme/colors';
 
@@ -82,6 +83,7 @@ export function RootNavigator() {
         {/* Pushed from BurgerMenu — moved off the bottom tab bar to make room for it. */}
         <RootStack.Screen name="Profile" component={ProfileScreen} options={{ ...menuScreenOptions, title: 'Profile' }} />
         <RootStack.Screen name="SavedJobs" component={SavedJobsScreen} options={{ ...menuScreenOptions, title: 'Saved Jobs' }} />
+        <RootStack.Screen name="SavedTenders" component={SavedTendersScreen} options={{ ...menuScreenOptions, title: 'Saved Tenders' }} />
         <RootStack.Screen name="Alerts" component={AlertsScreen} options={{ ...menuScreenOptions, title: 'Alerts' }} />
         <RootStack.Screen name="Settings" component={SettingsScreen} options={{ ...menuScreenOptions, title: 'Settings' }} />
       </RootStack.Navigator>

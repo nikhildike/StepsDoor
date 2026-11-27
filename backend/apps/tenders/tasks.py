@@ -81,23 +81,15 @@ def match_tender_alerts():
     """
     from zoneinfo import ZoneInfo
     from django.conf import settings
-    from django.db.models import Q
     from apps.notifications.alert_emails import AlertKind, DigestItem, inr, send_alert_digests
-    from apps.tenders.models import Tender, TenderAlert
+    from apps.tenders.listings import alert_match_queryset
+    from apps.tenders.models import TenderAlert
     IST = ZoneInfo('Asia/Kolkata')  # portals' deadlines are IST; show them as such
 
     def match(alert, since):
-        """Active tenders created after `since` that pass every filter the alert sets."""
-        qs = Tender.objects.filter(is_active=True, created_at__gt=since)
-        if alert.keyword:
-            qs = qs.filter(Q(title__icontains=alert.keyword) | Q(organisation__icontains=alert.keyword))
-        if alert.state:
-            qs = qs.filter(state__iexact=alert.state)
-        if alert.category:
-            qs = qs.filter(category=alert.category)
-        if alert.min_value:
-            qs = qs.filter(estimated_value__gte=alert.min_value)
-        return qs.order_by('submission_deadline', '-created_at')
+        """Open tenders first scraped after `since` matching the alert — the same rules as the
+        tenders listed under the alert on the site (`apps.tenders.listings.alert_match_queryset`)."""
+        return alert_match_queryset(alert).filter(created_at__gt=since)
 
     def to_item(tender):
         """Digest line: title, then organisation · state · value · closing date."""
