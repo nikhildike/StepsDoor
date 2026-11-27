@@ -38,14 +38,18 @@ export const seekerService = {
   savedJobs: () => api.get('/jobseekers/saved-jobs/'),
 
   /**
-   * Saves/bookmarks a private job listing for the logged-in job seeker.
+   * Saves a job of any kind for the logged-in job seeker. Saving a job that's
+   * already saved returns the existing record (200) instead of failing.
    *
    * Endpoint: POST /jobseekers/saved-jobs/
-   * @param {string|number} jobPostId - The `jobs` app JobPost id to save.
-   * @returns {Promise} Axios response promise resolving to the created saved-job record.
-   * Used by: `pages/public/JobDetail.jsx` / `pages/public/Jobs.jsx` (save button).
+   * @param {string|number} id - The job's id.
+   * @param {'job'|'company'|'govt'} [kind='job'] - StepsDoor post, company careers job, or govt job.
+   * @returns {Promise} Axios response promise resolving to the saved-job record.
+   * Used by: `hooks/useSavedJobs.js`.
    */
-  saveJob: (jobPostId) => api.post('/jobseekers/saved-jobs/', { job_post: jobPostId }),
+  saveJob: (id, kind = 'job') => api.post('/jobseekers/saved-jobs/', {
+    [{ job: 'job_post', company: 'career_job', govt: 'govt_job' }[kind]]: id,
+  }),
 
   /**
    * Removes a previously saved job.
@@ -96,4 +100,47 @@ export const seekerService = {
    * Used by: `pages/seeker/Alerts.jsx`.
    */
   deleteAlert: (id) => api.delete(`/alerts/${id}/`),
+
+  /**
+   * Open jobs matching one job alert, across StepsDoor posts, company careers
+   * pages and govt jobs, newest first.
+   *
+   * Endpoint: GET /alerts/{id}/matches/
+   * @param {string|number} id - Alert id.
+   * @param {Object} [params] - `limit` (default 20, max 50).
+   * @returns {Promise} Axios response promise resolving to
+   *   `{count, counts: {job, company, govt}, results: [{kind, id, title, company, location, apply_url, posted_at, deadline}]}`.
+   * Used by: `components/alerts/AlertMatches.jsx` on the Alerts page.
+   */
+  alertMatches: (id, params) => api.get(`/alerts/${id}/matches/`, { params }),
+
+  /**
+   * Open jobs matching any of the seeker's active alerts, each listed once.
+   *
+   * Endpoint: GET /alerts/matches/
+   * @param {Object} [params] - `limit` (default 20, max 50).
+   * @returns {Promise} Same shape as `alertMatches`.
+   * Used by: `pages/seeker/Overview.jsx` ("Jobs matching your alerts").
+   */
+  allAlertMatches: (params) => api.get('/alerts/matches/', { params }),
+
+  /**
+   * Role keyword suggestions for the job alert form, from open job titles.
+   *
+   * Endpoint: GET /alerts/suggestions/?q=
+   * @param {string} q - What's been typed (2+ characters, else the API returns []).
+   * @returns {Promise} Axios response promise resolving to `[{keyword, count}]`, most common first.
+   * Used by: `components/alerts/KeywordAutocomplete.jsx`.
+   */
+  keywordSuggestions: (q) => api.get('/alerts/suggestions/', { params: { q } }),
+
+  /**
+   * Numbers for the dashboard's stat cards.
+   *
+   * Endpoint: GET /jobseekers/stats/
+   * @returns {Promise} Axios response promise resolving to
+   *   `{saved_jobs, active_alerts, alert_matches, new_jobs_today: {total, job, company, govt}}`.
+   * Used by: `pages/seeker/Overview.jsx`.
+   */
+  stats: () => api.get('/jobseekers/stats/'),
 }

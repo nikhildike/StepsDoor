@@ -19,11 +19,14 @@ import { Button } from './Button';
 /**
  * Props for `MembersOnly`.
  * - `what`: what's behind the sign-in, e.g. "government tenders".
+ * - `source`: where the data comes from, shown as "updated every day from <source>"
+ *   (default "official portals").
  * - `compact`: inline card (inside a scrolling list such as Home search
  *   results) instead of a full-screen, centred prompt.
  */
 interface Props {
   what: string;
+  source?: string;
   compact?: boolean;
 }
 
@@ -32,11 +35,12 @@ interface Props {
  *
  * Lock icon, short explanation, and Sign In / Create free account actions.
  * Used by TendersScreen, TenderDetailScreen, GovtJobDetailScreen, the Govt
- * Jobs segment of the Jobs tab (HomeScreen), and HomeTabScreen's search results.
+ * Jobs segment of the Jobs tab (HomeScreen), HomeTabScreen's search results,
+ * and the company openings in the Companies segment (CompanyOpeningsSection).
  *
  * Props: see `Props` interface above.
  */
-export function MembersOnly({ what, compact = false }: Props) {
+export function MembersOnly({ what, source = 'official portals', compact = false }: Props) {
   const Colors = useThemeColors();
   const styles = makeStyles(Colors);
   // Root-stack screen names aren't in each tab's param list, hence the loose type.
@@ -46,7 +50,7 @@ export function MembersOnly({ what, compact = false }: Props) {
     <View style={compact ? styles.card : styles.container}>
       <Ionicons name="lock-closed-outline" size={compact ? 20 : 32} color={Colors.textSecondary} />
       <Text style={styles.title}>Free for members</Text>
-      <Text style={styles.description}>Sign in to see {what}, updated every day from official portals.</Text>
+      <Text style={styles.description}>Sign in to see {what}, updated every day from {source}.</Text>
       <Button title="Sign In" onPress={() => navigation.navigate('Auth')} style={styles.button} />
       <TouchableOpacity onPress={() => navigation.navigate('Auth', { screen: 'Register' })} style={styles.link}>
         <Text style={styles.linkText}>Create free account</Text>

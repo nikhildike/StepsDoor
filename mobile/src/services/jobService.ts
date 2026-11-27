@@ -3,9 +3,9 @@
  *
  * Thin wrapper around the shared `api` Axios instance for the private job
  * listing endpoints (company-posted jobs job seekers browse for free and
- * are redirected off-app to apply) plus the seeker's saved-jobs list.
- * Consumed by `hooks/useJobs.ts` and the Jobs tab's list/detail screens
- * and the seeker's Saved Jobs screen. Mirrors `frontend/src/services/jobService.js`.
+ * are redirected off-app to apply). Consumed by `hooks/useJobs.ts` and the
+ * Jobs tab's list/detail screens. Saved jobs live in `seekerService.ts`.
+ * Mirrors `frontend/src/services/jobService.js`.
  */
 import api from './api';
 
@@ -37,24 +37,4 @@ export const jobService = {
    *   job record's own `redirect_url` if this call fails, so Apply never breaks.
    */
   trackClick: (id: number) => api.post(`/jobs/${id}/track-click/`),
-  /**
-   * List the signed-in job seeker's saved/bookmarked jobs.
-   * @returns Axios response with the user's saved job entries.
-   * @remarks Used by the seeker's Saved Jobs screen.
-   */
-  saved: () => api.get('/jobseekers/saved/'),
-  /**
-   * Save (bookmark) a job for the signed-in job seeker.
-   * @param jobId - Numeric id of the job post to save.
-   * @returns Axios response confirming the save.
-   * @remarks Used by the Job list/detail screens' save/bookmark action.
-   */
-  save: (jobId: number) => api.post('/jobseekers/saved/', { job_post: jobId }),
-  /**
-   * Remove a previously saved job for the signed-in job seeker.
-   * @param jobId - Numeric id of the job post to unsave.
-   * @returns Axios response confirming the removal.
-   * @remarks Used by the seeker's Saved Jobs screen.
-   */
-  unsave: (jobId: number) => api.delete(`/jobseekers/saved/${jobId}/`),
 };

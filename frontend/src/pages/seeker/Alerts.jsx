@@ -4,8 +4,12 @@
  * Route: `/seeker/alerts` (nested under the seeker account layout).
  * Access: any authenticated user.
  *
- * Job seekers see "Job Alerts": keyword/city/job-type/salary filters that
- * the backend `alerts` app matches against new private job postings.
+ * Job seekers see "Job Alerts": saved keyword/city (plus job-type/salary)
+ * searches. Under each alert, `AlertMatches` lists the open jobs it matches
+ * right now across StepsDoor posts, company careers pages and government jobs,
+ * each with a save toggle. New StepsDoor posts and company careers-page jobs
+ * matching an alert are also emailed (and pushed) in a daily digest by the
+ * backend `alerts` app.
  *
  * Contractors see "Tender Alerts": keyword/state/category/min-value filters
  * that the backend `match_tender_alerts` Celery task matches against new
@@ -13,8 +17,11 @@
  */
 import { useEffect, useState } from 'react'
 import { GovtJobAlertPanel } from '@/components/govtjobs/GovtJobAlertPanel'
+import { AlertMatches } from '@/components/alerts/AlertMatches'
+import { KeywordAutocomplete } from '@/components/alerts/KeywordAutocomplete'
+import { useSavedJobs } from '@/hooks/useSavedJobs'
 import { Bell, Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { seekerService } from '@/services/seekerService'
 import { tenderService } from '@/services/tenderService'
 import { useAuthStore } from '@/store/authStore'
@@ -157,17 +164,22 @@ function TenderAlertPanel({ alerts, onCreate, onToggle, onDelete, showForm, setS
 /**
  * Alert creation/management UI for job seeker accounts (job alerts).
  *
- * Filters: role keyword, city, job type, min salary. All optional.
+ * Filters: role keyword, city, job type, min salary. All optional. Each alert
+ * card shows its matching jobs (collapsible `AlertMatches`).
  *
- * @param {{ alerts: Array, onCreate: function, onToggle: function, onDelete: function, showForm: boolean, setShowForm: function, isSubmitting: boolean, register: function, handleSubmit: function, reset: function }} props
+ * @param {{ alerts: Array, onCreate: function, onToggle: function, onDelete: function, showForm: boolean, setShowForm: function, isSubmitting: boolean, register: function, control: object, handleSubmit: function, reset: function, saves: object }} props
+ *   `saves` is the page's `useSavedJobs()` result, shared by every alert's job list;
+ *   `control` binds the Role / Keyword autocomplete to the form.
  */
-function JobAlertPanel({ alerts, onCreate, onToggle, onDelete, showForm, setShowForm, isSubmitting, register, handleSubmit, reset }) {
+function JobAlertPanel({ alerts, onCreate, onToggle, onDelete, showForm, setShowForm, isSubmitting, register, control, handleSubmit, reset, saves }) {
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Job Alerts</h1>
-          <p className="text-muted-foreground mt-1">Get notified when new matching jobs are posted.</p>
+          <p className="text-muted-foreground mt-1">
+            Save a keyword and see every matching job — on StepsDoor, on company careers pages and from government recruiters.
+          </p>
         </div>
         <Button onClick={() => setShowForm(v => !v)}>
           <Plus className="h-4 w-4 mr-1" /> New Alert
@@ -179,8 +191,18 @@ function JobAlertPanel({ alerts, onCreate, onToggle, onDelete, showForm, setShow
           <h2 className="font-semibold text-sm">New Job Alert</h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Role / Keyword</label>
-              <Input {...register('role_keyword')} placeholder="e.g. React Developer" className="mt-1" />
+              <label htmlFor="alert-role-keyword" className="text-xs font-medium text-muted-foreground">Role / Keyword</label>
+              {/* Suggests keywords from open job titles while typing. */}
+              <Controller
+                name="role_keyword"
+                control={control}
+                defaultValue=""
+                render={({ field }) => (
+                  <KeywordAutocomplete id="alert-role-keyword" value={field.value} onChange={field.onChange}
+                    onBlur={field.onBlur} placeholder="e.g. React Developer" className="mt-1" />
+                )}
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">Every word must appear in the job title or company.</p>
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">City</label>
@@ -202,6 +224,10 @@ function JobAlertPanel({ alerts, onCreate, onToggle, onDelete, showForm, setShow
               <Input {...register('salary_min')} type="number" placeholder="e.g. 500000" className="mt-1" />
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Job type and minimum salary are only listed on StepsDoor posts, so setting either shows StepsDoor posts only.
+            Government jobs aren&apos;t tied to a city, so a city leaves them out.
+          </p>
           <div className="flex gap-2">
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Saving...' : 'Create Alert'}
@@ -217,46 +243,50 @@ function JobAlertPanel({ alerts, onCreate, onToggle, onDelete, showForm, setShow
         <div className="bg-white rounded-xl border border-border p-12 text-center text-muted-foreground">
           <Bell className="h-10 w-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No alerts set up yet</p>
-          <p className="text-sm mt-1">Create an alert to get notified about new jobs.</p>
+          <p className="text-sm mt-1">Create an alert with a keyword like &quot;data analyst&quot; to see every matching job in one place.</p>
         </div>
       ) : (
         <div className="space-y-3">
           {alerts.map(alert => (
-            <div key={alert.id} className="bg-white rounded-xl border border-border p-4 flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {alert.role_keyword && (
-                    <span className="text-sm font-medium">"{alert.role_keyword}"</span>
-                  )}
-                  {alert.city && (
-                    <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{alert.city}</span>
-                  )}
-                  {alert.job_type && (
-                    <span className="text-xs bg-muted px-2 py-0.5 rounded-full capitalize">{alert.job_type.replace('_', ' ')}</span>
-                  )}
-                  {alert.salary_min && (
-                    <span className="text-xs bg-muted px-2 py-0.5 rounded-full">
-                      ₹{(alert.salary_min / 100000).toFixed(1)}L+ /yr
-                    </span>
-                  )}
-                  {!alert.role_keyword && !alert.city && !alert.job_type && (
-                    <span className="text-sm text-muted-foreground">All jobs</span>
-                  )}
+            <div key={alert.id} className="bg-white rounded-xl border border-border p-4 space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {alert.role_keyword && (
+                      <span className="text-sm font-medium">"{alert.role_keyword}"</span>
+                    )}
+                    {alert.city && (
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{alert.city}</span>
+                    )}
+                    {alert.job_type && (
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded-full capitalize">{alert.job_type.replace('_', ' ')}</span>
+                    )}
+                    {alert.salary_min && (
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded-full">
+                        ₹{(alert.salary_min / 100000).toFixed(1)}L+ /yr
+                      </span>
+                    )}
+                    {!alert.role_keyword && !alert.city && !alert.job_type && (
+                      <span className="text-sm text-muted-foreground">All jobs</span>
+                    )}
+                  </div>
+                  <span className={`inline-flex items-center text-xs font-medium ${alert.is_active ? 'text-green-600' : 'text-gray-400'}`}>
+                    {alert.is_active ? '● Active' : '○ Paused'}
+                  </span>
                 </div>
-                <span className={`inline-flex items-center text-xs font-medium ${alert.is_active ? 'text-green-600' : 'text-gray-400'}`}>
-                  {alert.is_active ? '● Active' : '○ Paused'}
-                </span>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => onToggle(alert)} title={alert.is_active ? 'Pause' : 'Activate'} className="p-1.5 rounded hover:bg-muted transition-colors">
+                    {alert.is_active
+                      ? <ToggleRight className="h-5 w-5 text-green-600" />
+                      : <ToggleLeft className="h-5 w-5 text-gray-400" />}
+                  </button>
+                  <button onClick={() => onDelete(alert.id)} title="Delete" className="p-1.5 rounded hover:bg-destructive/10 transition-colors">
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button onClick={() => onToggle(alert)} title={alert.is_active ? 'Pause' : 'Activate'} className="p-1.5 rounded hover:bg-muted transition-colors">
-                  {alert.is_active
-                    ? <ToggleRight className="h-5 w-5 text-green-600" />
-                    : <ToggleLeft className="h-5 w-5 text-gray-400" />}
-                </button>
-                <button onClick={() => onDelete(alert.id)} title="Delete" className="p-1.5 rounded hover:bg-destructive/10 transition-colors">
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </button>
-              </div>
+              {/* The open jobs this alert matches now, across all job sources. */}
+              <AlertMatches alertId={alert.id} collapsible saves={saves} />
             </div>
           ))}
         </div>
@@ -278,7 +308,8 @@ export default function Alerts() {
   const [alerts, setAlerts] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm()
+  const { register, control, handleSubmit, reset, formState: { isSubmitting } } = useForm()
+  const saves = useSavedJobs() // shared by every job alert's list of matching jobs
 
   // Fetch the correct alert type based on role.
   useEffect(() => {
@@ -332,7 +363,7 @@ export default function Alerts() {
   if (loading) return <div className="text-muted-foreground">Loading...</div>
 
   // Shared props passed to whichever panel is rendered.
-  const panelProps = { alerts, onCreate, onToggle, onDelete, showForm, setShowForm, isSubmitting, register, handleSubmit, reset }
+  const panelProps = { alerts, onCreate, onToggle, onDelete, showForm, setShowForm, isSubmitting, register, control, handleSubmit, reset, saves }
 
   return isContractor
     ? <TenderAlertPanel {...panelProps} />

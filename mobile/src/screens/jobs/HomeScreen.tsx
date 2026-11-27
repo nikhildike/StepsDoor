@@ -5,24 +5,29 @@
  * (Jobs / Govt Jobs / Companies) with the matching content rendered
  * inline below it — switching segments changes local state only, it
  * never navigates away, so the row (and which segment is highlighted)
- * stays constant no matter which of the three is active. Job/Govt Job/
- * Company cards all push their respective detail screens
- * (`JobDetail`/`GovtJobDetail`/`CompanyCareers`, all registered on this
- * same `JobsStackNavigator`) — a company card links to StepsDoor's own
- * branded careers page for that company, not the company's external
- * `website` field (often unset, and not guaranteed to be a careers page
- * even when it is). Note: the "StepsDoor" / "Latest Jobs in India"
+ * stays constant no matter which of the three is active.
+ *
+ * - Jobs: one block — the search box, the "Hiring on StepsDoor" companies row
+ *   (`HiringCompaniesRow`, narrowed by the same search text, hidden when empty)
+ *   and the job list — the same layout as the web Jobs page. A company card
+ *   opens StepsDoor's own branded careers page for it (`CompanyCareers`), not
+ *   the company's external `website` field.
+ * - Govt Jobs: members-only government openings.
+ * - Companies: openings read from companies' careers pages
+ *   (`CompanyOpeningsSection`) and the static career directory.
+ *
+ * Cards push `JobDetail` / `GovtJobDetail` / `CompanyCareers`, all registered
+ * on this same `JobsStackNavigator`. Note: the "StepsDoor" / "Latest Jobs in India"
  * branding header lives on the Home tab now
  * (`screens/home/HomeTabScreen.tsx`), not here. The Jobs segment's search
  * box shares jobStore's `filters.search` state with that Home tab search
  * box (see `useJobs`) — typing in either updates the same search text.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Image, TextInput } from 'react-native';
+import { View, Text, FlatList, ScrollView, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useJobs } from '@/hooks/useJobs';
 import { govtJobService } from '@/services/govtJobService';
-import { companyService } from '@/services/companyService';
 import { JobCard } from '@/components/jobs/JobCard';
 import { Spinner } from '@/components/common/Spinner';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -31,6 +36,10 @@ import { ScreenWrapper } from '@/components/common/ScreenWrapper';
 import { MembersOnly } from '@/components/common/MembersOnly';
 import { useAuth } from '@/hooks/useAuth';
 import { CompanyDirectorySection } from '@/components/companies/CompanyDirectorySection';
+import { CompanyOpeningsSection } from '@/components/companies/CompanyOpeningsSection';
+import { HiringCompaniesRow } from '@/components/companies/HiringCompaniesRow';
+import { SaveJobButton } from '@/components/jobs/SaveJobButton';
+import { useSavedJobs } from '@/hooks/useSavedJobs';
 import { FilterPickerButton, FilterOption } from '@/components/common/FilterPickerButton';
 import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
@@ -69,20 +78,15 @@ interface GovtJob {
   last_date?: string;
 }
 
-interface Company {
-  id: number;
-  name: string;
-  slug: string;
-  logo?: string | null;
-  description?: string;
-  website?: string;
-  active_job_count: number;
-}
-
 // Card renderer for the Govt Jobs segment. Formats the deadline and
 // flags jobs expiring within 3 days so the list can highlight urgency —
 // mirrors the card that used to live in the standalone GovtJobsScreen.
-function GovtJobCard({ job, onPress }: { job: GovtJob; onPress: () => void }) {
+// `save` ({ saved, pending, onToggle }) adds a bookmark toggle; omitted for guests/company accounts.
+function GovtJobCard({ job, onPress, save }: {
+  job: GovtJob;
+  onPress: () => void;
+  save?: { saved: boolean; pending?: boolean; onToggle: () => void } | null;
+}) {
   const Colors = useThemeColors();
   const styles = makeStyles(Colors);
   const lastDate = job.last_date
@@ -94,7 +98,10 @@ function GovtJobCard({ job, onPress }: { job: GovtJob; onPress: () => void }) {
 
   return (
     <TouchableOpacity style={styles.govtCard} onPress={onPress} activeOpacity={0.8}>
-      <Text style={styles.govtTitle} numberOfLines={2}>{job.title}</Text>
+      <View style={styles.govtHeader}>
+        <Text style={styles.govtTitle} numberOfLines={2}>{job.title}</Text>
+        {save && <SaveJobButton {...save} />}
+      </View>
       <Text style={styles.govtOrg}>{job.organisation}</Text>
       <Text style={styles.govtState}>{job.state}</Text>
       <View style={styles.govtFooter}>
@@ -106,35 +113,6 @@ function GovtJobCard({ job, onPress }: { job: GovtJob; onPress: () => void }) {
           Last date: {lastDate}
         </Text>
       )}
-    </TouchableOpacity>
-  );
-}
-
-// Card renderer for the Companies segment — pushes CompanyCareersScreen
-// (StepsDoor's own hosted careers page for this company), not the
-// company's external website field.
-function CompanyCard({ company, onPress }: { company: Company; onPress: () => void }) {
-  const Colors = useThemeColors();
-  const styles = makeStyles(Colors);
-
-  return (
-    <TouchableOpacity style={styles.companyCard} activeOpacity={0.75} onPress={onPress}>
-      {company.logo ? (
-        <Image source={{ uri: company.logo }} style={styles.companyLogo} resizeMode="cover" />
-      ) : (
-        <View style={styles.companyLogoFallback}>
-          <Text style={styles.companyLogoFallbackIcon}>🏢</Text>
-        </View>
-      )}
-      <View style={styles.companyInfo}>
-        <Text style={styles.companyName} numberOfLines={1}>{company.name}</Text>
-        {company.description ? (
-          <Text style={styles.companyDesc} numberOfLines={2}>{company.description}</Text>
-        ) : null}
-        <Text style={styles.companyJobCount}>
-          {company.active_job_count} open position{company.active_job_count !== 1 ? 's' : ''}
-        </Text>
-      </View>
     </TouchableOpacity>
   );
 }
@@ -159,6 +137,8 @@ export function HomeScreen({ navigation, route }: { navigation: any; route?: any
   }, [requestedSegment, route?.key, route?.params]);
   const Colors = useThemeColors();
   const styles = makeStyles(Colors);
+  // Bookmark toggles on the StepsDoor and govt job cards (shared app-wide store).
+  const { canSave, isSaved, isPending, toggleSave } = useSavedJobs();
 
   // Jobs — the default segment, so fetched immediately via the existing
   // hook. `filters`/`setFilters` are jobStore state shared with the Home
@@ -199,22 +179,6 @@ export function HomeScreen({ navigation, route }: { navigation: any; route?: any
       .finally(() => setGovtJobsLoading(false));
   }, [segment, isAuthenticated, govtSearch, govtState, govtCategory]);
 
-  // Companies — fetched once, the first time this segment is selected
-  // (a static subscriber list doesn't need refetching on every switch).
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [companiesLoading, setCompaniesLoading] = useState(false);
-  const companiesFetchedRef = useRef(false);
-  useEffect(() => {
-    if (segment !== 'companies' || companiesFetchedRef.current) return;
-    companiesFetchedRef.current = true;
-    setCompaniesLoading(true);
-    companyService
-      .list()
-      .then(({ data }) => setCompanies(data.results ?? data))
-      .catch(() => {})
-      .finally(() => setCompaniesLoading(false));
-  }, [segment]);
-
   return (
     <ScreenWrapper>
       {/* Segmented row — always rendered, regardless of which segment is
@@ -242,23 +206,37 @@ export function HomeScreen({ navigation, route }: { navigation: any; route?: any
           <View style={styles.searchBar}>
             <TextInput
               style={styles.searchInput}
-              placeholder="Search jobs..."
+              placeholder="Search jobs or companies..."
               placeholderTextColor={Colors.textMuted}
               value={filters.search}
               onChangeText={(text) => setFilters({ search: text })}
             />
           </View>
-          {jobsLoading ? <Spinner /> : (
-            <FlatList
-              data={jobs}
-              keyExtractor={(item) => String(item.id)}
-              contentContainerStyle={styles.list}
-              renderItem={({ item }) => (
-                <JobCard job={item} onPress={() => navigation.navigate('JobDetail', { jobId: item.id })} />
-              )}
-              ListEmptyComponent={<EmptyState title="No jobs found" description="Try a different search term." />}
-            />
-          )}
+          {/* The list stays mounted while jobs load (spinner in the empty slot), so the
+              companies row in its header isn't remounted — and refetched — on every keystroke. */}
+          <FlatList
+            data={jobsLoading ? [] : jobs}
+            keyExtractor={(item) => String(item.id)}
+            contentContainerStyle={styles.list}
+            renderItem={({ item }) => (
+              <JobCard
+                job={item}
+                onPress={() => navigation.navigate('JobDetail', { jobId: item.id })}
+                save={canSave ? { saved: isSaved(item.id, 'job'), pending: isPending(item.id, 'job'), onToggle: () => toggleSave(item.id, 'job') } : null}
+              />
+            )}
+            // Companies hiring on StepsDoor, in the same block as the jobs and
+            // narrowed by the same search text; renders nothing when none match.
+            ListHeaderComponent={
+              <HiringCompaniesRow
+                search={filters.search ?? ''}
+                onOpen={(slug) => navigation.navigate('CompanyCareers', { slug })}
+              />
+            }
+            ListEmptyComponent={
+              jobsLoading ? <Spinner /> : <EmptyState title="No jobs found" description="Try a different search term." />
+            }
+          />
         </>
       )}
 
@@ -301,7 +279,11 @@ export function HomeScreen({ navigation, route }: { navigation: any; route?: any
               keyExtractor={(item) => String(item.id)}
               contentContainerStyle={styles.list}
               renderItem={({ item }) => (
-                <GovtJobCard job={item} onPress={() => navigation.navigate('GovtJobDetail', { jobId: item.id })} />
+                <GovtJobCard
+                  job={item}
+                  onPress={() => navigation.navigate('GovtJobDetail', { jobId: item.id })}
+                  save={canSave ? { saved: isSaved(item.id, 'govt'), pending: isPending(item.id, 'govt'), onToggle: () => toggleSave(item.id, 'govt') } : null}
+                />
               )}
               ListEmptyComponent={
                 <EmptyState title="No government jobs found" description="Check back soon for new listings." />
@@ -312,23 +294,14 @@ export function HomeScreen({ navigation, route }: { navigation: any; route?: any
       )}
 
       {segment === 'companies' && (
-        companiesLoading ? <Spinner /> : (
-          <FlatList
-            data={companies}
-            keyExtractor={(item) => String(item.id)}
-            contentContainerStyle={styles.list}
-            renderItem={({ item }) => (
-              <CompanyCard company={item} onPress={() => navigation.navigate('CompanyCareers', { slug: item.slug })} />
-            )}
-            ListEmptyComponent={
-              <EmptyState title="No companies yet" description="Check back soon for companies hiring on StepsDoor." />
-            }
-            // Static career directory (300+ external companies, sector
-            // filter + search) rendered below the subscriber list, mirroring
-            // the bottom section of the web app's Companies page.
-            ListFooterComponent={<CompanyDirectorySection mode="full" />}
-          />
-        )
+        // Openings read from companies' own careers pages (members only), then
+        // the static career directory — the same order as the web Companies page.
+        // Both render plain Views, so a ScrollView is enough here. Companies
+        // hiring on StepsDoor are in the Jobs segment.
+        <ScrollView contentContainerStyle={styles.list}>
+          <CompanyOpeningsSection />
+          <CompanyDirectorySection mode="full" />
+        </ScrollView>
       )}
     </ScreenWrapper>
   );
@@ -386,37 +359,12 @@ const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  govtTitle: { fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.text },
+  govtHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing[2] },
+  govtTitle: { flex: 1, fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.text },
   govtOrg: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 4 },
   govtState: { fontSize: FontSize.sm, color: Colors.textMuted, marginTop: 2 },
   govtFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing[3] },
   govtVacancies: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: FontWeight.medium },
   govtLastDate: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: Spacing[2] },
   govtLastDateUrgent: { color: Colors.error, fontWeight: FontWeight.semibold },
-
-  // Companies segment
-  companyCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: Spacing[3],
-    marginBottom: Spacing[2],
-  },
-  companyLogo: { width: 48, height: 48, borderRadius: BorderRadius.md },
-  companyLogoFallback: {
-    width: 48,
-    height: 48,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  companyLogoFallbackIcon: { fontSize: 22 },
-  companyInfo: { flex: 1, marginLeft: Spacing[3] },
-  companyName: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, color: Colors.text },
-  companyDesc: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
-  companyJobCount: { fontSize: FontSize.xs, fontWeight: FontWeight.medium, color: Colors.primary, marginTop: 4 },
 });

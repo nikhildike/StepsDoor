@@ -18,8 +18,9 @@ import { Lock } from 'lucide-react'
  *
  * Props:
  * - what (string, required) — what's behind the sign-in, e.g. "the latest government tenders".
+ * - source (string, optional) — where the data comes from, shown as "updated every day from <source>" (default "official portals").
  */
-export function MembersOnly({ what }) {
+export function MembersOnly({ what, source = 'official portals' }) {
   const location = useLocation()
   const from = location.pathname + location.search // where to come back to after auth
 
@@ -27,7 +28,7 @@ export function MembersOnly({ what }) {
     <div className="rounded-xl border border-dashed bg-muted/30 p-6 text-center">
       <Lock className="mx-auto h-5 w-5 text-muted-foreground" />
       <p className="mt-2 text-sm font-medium text-foreground">Free for members</p>
-      <p className="mt-1 text-sm text-muted-foreground">Sign in to see {what}, updated every day from official portals.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Sign in to see {what}, updated every day from {source}.</p>
       <div className="mt-4 flex justify-center gap-2">
         <Link
           to="/login"

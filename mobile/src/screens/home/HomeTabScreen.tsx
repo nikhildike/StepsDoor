@@ -12,6 +12,10 @@
  * This is deliberately about newly-posted content, not the job seeker's
  * own browsing history (there is no view-tracking here).
  *
+ * Signed-in job seekers also get their dashboard at the top of the feed
+ * (`SeekerSummary`: Saved Jobs / Active Alerts / New Jobs Today cards and the
+ * newest jobs matching their alerts), shown even when the feed is empty.
+ *
  * Unlike the old job-only search, typing here searches *every* browsable
  * section at once — Jobs (API), Tenders (API), and the static Shopping
  * directory (client-side filter of `ShoppingScreen`'s exported
@@ -28,6 +32,7 @@ import { tenderService } from '@/services/tenderService';
 import { useJobs } from '@/hooks/useJobs';
 import { useAuth } from '@/hooks/useAuth';
 import { MembersOnly } from '@/components/common/MembersOnly';
+import { SeekerSummary } from '@/components/home/SeekerSummary';
 import { JobCard } from '@/components/jobs/JobCard';
 import { TenderCard } from '@/components/tenders/TenderCard';
 import { ALL_STORES, ALL_RETAIL_STORES, StoreEntry } from '@/screens/shopping/ShoppingScreen';
@@ -397,20 +402,23 @@ export function HomeTabScreen() {
             )}
           </ScrollView>
         )
-      ) : feedLoading ? (
-        <Spinner />
-      ) : !hasFeedContent ? (
-        <EmptyState
-          title="Nothing new yet"
-          description={
-            isContractor
-              ? 'Check back soon for new government tenders.'
-              : 'Check back soon for new jobs, stores, and offers.'
-          }
-        />
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
-          {isContractor ? (
+          {/* Job seeker dashboard (stat cards + jobs matching their alerts). Above the
+              feed and outside its loading/empty states, so it always shows. */}
+          <SeekerSummary />
+          {feedLoading ? (
+            <Spinner />
+          ) : !hasFeedContent ? (
+            <EmptyState
+              title="Nothing new yet"
+              description={
+                isContractor
+                  ? 'Check back soon for new government tenders.'
+                  : 'Check back soon for new jobs, stores, and offers.'
+              }
+            />
+          ) : isContractor ? (
             // Contractor dashboard: show new tenders instead of jobs/stores/offers.
             latestTenders.length > 0 && (
               <View style={styles.section}>

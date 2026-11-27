@@ -35,7 +35,7 @@ export default function JobDetail() {
   // Shared saved-jobs hook: tracks which jobs are saved, exposes a toggle,
   // whether the current user is a job seeker, and per-job pending state
   // (so the Save button can disable itself while the request is in flight).
-  const { isSaved, toggleSave, isSeeker, pending } = useSavedJobs()
+  const { isSaved, toggleSave, isSeeker, isPending } = useSavedJobs()
 
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -133,7 +133,7 @@ export default function JobDetail() {
           </Button>
           <button
             onClick={handleSave}
-            disabled={pending.has(jobId)}
+            disabled={isPending(jobId)}
             title={saved ? 'Remove from saved' : 'Save job'}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 ${
               saved

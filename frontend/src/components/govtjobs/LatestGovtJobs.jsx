@@ -23,6 +23,8 @@ import { Spinner } from '@/components/ui/Spinner'
 import { deadlineInfo, DEADLINE_BADGE } from '@/utils/deadline'
 import { formatDate } from '@/utils/formatDate'
 import { useListingPrefix } from '@/hooks/useDashboardBase'
+import { useSavedJobs } from '@/hooks/useSavedJobs'
+import { SaveJobButton } from '@/components/jobs/SaveJobButton'
 
 // Mirrors backend apps.govtjobs.models.GovtJobCategory.
 export const GOVT_JOB_CATEGORIES = [
@@ -49,9 +51,10 @@ const PAGE_SIZE = 20 // the backend's default page size (core/pagination.py)
 
 /**
  * One opening: title → /govt-jobs/:id (/seeker/govt-jobs/:id in the dashboard, via `prefix`), organisation, a row of facts (deadline badge,
- * vacancies, qualification, state, category) and the two apply-side actions.
+ * vacancies, qualification, state, category), the two apply-side actions, and a save toggle
+ * (`save` = {saved, pending, onToggle}; omitted for company accounts).
  */
-function GovtJobCard({ job, prefix }) {
+function GovtJobCard({ job, prefix, save }) {
   const deadline = deadlineInfo(job.application_deadline)
   return (
     <div className="rounded-lg border border-border bg-white p-4 transition-shadow hover:shadow-sm">
@@ -59,11 +62,14 @@ function GovtJobCard({ job, prefix }) {
         <Link to={`${prefix}/govt-jobs/${job.id}`} className="text-sm font-medium text-foreground hover:text-primary line-clamp-2">
           {job.title}
         </Link>
-        {deadline && (
-          <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${DEADLINE_BADGE[deadline.urgency]}`}>
-            {deadline.label}
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-1">
+          {deadline && (
+            <span className={`rounded px-2 py-0.5 text-xs font-medium ${DEADLINE_BADGE[deadline.urgency]}`}>
+              {deadline.label}
+            </span>
+          )}
+          {save && <SaveJobButton {...save} />}
+        </div>
       </div>
       <p className="mt-1 text-xs text-muted-foreground line-clamp-1">{job.organisation}</p>
 
@@ -107,6 +113,7 @@ function GovtJobCard({ job, prefix }) {
  */
 export function LatestGovtJobs() {
   const { token } = useAuthStore()
+  const { isSaved, toggleSave, isPending, isSeeker } = useSavedJobs() // save toggles on the cards
   const prefix = useListingPrefix() // '/seeker' inside the dashboard, so detail links stay in it
   const [searchParams, setSearchParams] = useSearchParams()
   const urlSearch = searchParams.get('search') || ''        // keyword from the URL (?search=...)
@@ -198,7 +205,14 @@ export function LatestGovtJobs() {
         <>
           <p className="mb-3 text-xs text-muted-foreground">{total.toLocaleString('en-IN')} opening{total === 1 ? '' : 's'}</p>
           <div className={`space-y-3 ${loading ? 'opacity-60' : ''}`}>
-            {result.results.map(job => <GovtJobCard key={job.id} job={job} prefix={prefix} />)}
+            {result.results.map(job => (
+              <GovtJobCard
+                key={job.id}
+                job={job}
+                prefix={prefix}
+                save={isSeeker ? { saved: isSaved(job.id, 'govt'), pending: isPending(job.id, 'govt'), onToggle: () => toggleSave(job.id, 'govt') } : null}
+              />
+            ))}
           </div>
           {pages > 1 && (
             <div className="mt-6 flex items-center justify-center gap-3 text-sm">

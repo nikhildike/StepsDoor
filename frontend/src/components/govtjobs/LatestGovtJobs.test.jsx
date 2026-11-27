@@ -35,6 +35,8 @@ vi.mock('@/services/seekerService', () => ({
     profile: vi.fn(() => Promise.resolve({ data: { first_name: 'Asha' } })),
     savedJobs: vi.fn(() => Promise.resolve({ data: [] })),
     alerts: vi.fn(() => Promise.resolve({ data: [] })),
+    stats: vi.fn(() => Promise.resolve({ data: { saved_jobs: 0, active_alerts: 0, alert_matches: 0, new_jobs_today: { total: 0, job: 0, company: 0, govt: 0 } } })),
+    allAlertMatches: vi.fn(() => Promise.resolve({ data: { count: 0, counts: {}, results: [] } })),
   },
 }))
 vi.mock('@/services/jobService', () => ({ jobService: { list: vi.fn(() => Promise.reject(new Error('jobs down'))) } }))

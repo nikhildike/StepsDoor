@@ -5,7 +5,10 @@
  * a paginated, filterable grid of private (company-posted) job listings.
  * All data fetching, filter state, and pagination live in the `useJobs`
  * hook; this component is mostly presentational plumbing between that hook
- * and the `JobFilter`/`JobCard` components.
+ * and the `JobFilter`/`JobCard` components. One block: the filter bar, then
+ * the companies hiring on StepsDoor (`HiringCompanies`, narrowed by the same
+ * search text), then the job results. Also mounted in the student dashboard
+ * at `/seeker/browse-jobs`.
  */
 import { useNavigate } from 'react-router-dom'
 import { useJobs } from '@/hooks/useJobs'
@@ -15,6 +18,7 @@ import { JobCard } from '@/components/jobs/JobCard'
 import { JobFilter } from '@/components/jobs/JobFilter'
 import { Spinner } from '@/components/ui/Spinner'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { HiringCompanies } from '@/components/companies/HiringCompanies'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 const PAGE_SIZE = 20 // must match the backend's page size for the Jobs list endpoint, used only to compute totalPages
@@ -31,7 +35,7 @@ export default function Jobs() {
   const { jobs, total, loading, filters, setFilters, setPage } = useJobs()
   // Shared saved-jobs hook: tracks which jobs are saved, exposes a toggle,
   // whether the current user is a job seeker, and per-job pending state.
-  const { isSaved, toggleSave, isSeeker, pending } = useSavedJobs()
+  const { isSaved, toggleSave, isSeeker, isPending } = useSavedJobs()
   const { token } = useAuthStore()
   const navigate = useNavigate()
 
@@ -60,6 +64,9 @@ export default function Jobs() {
 
       <JobFilter filters={filters} onChange={setFilters} />
 
+      {/* Subscriber companies (hidden when none match), sharing the job search text. */}
+      <HiringCompanies search={filters.search ?? ''} />
+
       <div className="mt-6">
         {/* Loading / empty / results states, in that priority order */}
         {loading ? (
@@ -76,7 +83,7 @@ export default function Jobs() {
                   job={job}
                   isSaved={isSeeker && isSaved(job.id)}
                   onToggleSave={handleToggleSave}
-                  isPending={pending.has(job.id)}
+                  isPending={isPending(job.id)}
                 />
               ))}
             </div>

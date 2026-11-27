@@ -65,10 +65,15 @@ class AlertKind:
     - noun: plural shown in the email body, e.g. "government tenders"
     - label: singular alert name for the subject, e.g. "tender" → "…for your tender alerts"
     - user_of: alert → User who receives the email
-    - match: (alert, since) → queryset of listings created after `since` matching the alert
+    - match: (alert, since) → iterable of listings created after `since` matching the alert
+      (may mix models, e.g. StepsDoor posts and company careers jobs)
     - to_item: listing → DigestItem
     - push_kind: "tender" | "govt_job" | "job" — tells the mobile app which screen a
       tapped push should open (see mobile/src/services/notificationRouting.ts)
+    - key_of: listing → dedup key across a user's alerts (default: its pk). Needed when
+      `match` mixes models, whose pks can collide.
+    - push_id_of: listing → id sent in the push when it's the only match, so a tap opens
+      it (default: its pk); return None when the app has no screen for that listing.
     """
     noun: str
     label: str
@@ -76,13 +81,15 @@ class AlertKind:
     match: callable
     to_item: callable
     push_kind: str = ''
+    key_of: callable = None
+    push_id_of: callable = None
 
 
 @dataclass
 class _UserDigest:
     """Per-user accumulator: the user's alerts this run and their matched listings (deduplicated)."""
     alerts: list = field(default_factory=list)
-    listings: dict = field(default_factory=dict)  # listing pk → listing, insertion-ordered
+    listings: dict = field(default_factory=dict)  # listing key (AlertKind.key_of, default pk) → listing, insertion-ordered
 
 
 def send_alert_digests(alerts, kind: AlertKind):
@@ -104,7 +111,7 @@ def send_alert_digests(alerts, kind: AlertKind):
         digest.alerts.append(alert)
         since = alert.last_checked_at or alert.created_at
         for listing in kind.match(alert, since):
-            digest.listings.setdefault(listing.pk, listing)
+            digest.listings.setdefault(kind.key_of(listing) if kind.key_of else listing.pk, listing)
 
     counts = {'users_emailed': 0, 'users_pushed': 0, 'listings_sent': 0, 'failed': 0}
     for user, digest in digests.values():
@@ -135,8 +142,9 @@ def _push_digest(user, kind, listings):
     """
     Push a one-line summary of the digest to the user's devices; returns messages accepted.
 
-    Payload `data` = {type: "alert_digest", kind, count, id}: `id` is the listing's pk when
-    there's exactly one match, so a tap opens it directly; otherwise the app opens the list.
+    Payload `data` = {type: "alert_digest", kind, count, id}: `id` is the listing's id
+    (`AlertKind.push_id_of`, default pk) when there's exactly one match, so a tap opens it
+    directly; otherwise (or when push_id_of gives None) the app opens the list.
     """
     from apps.notifications.push import send_push  # local import: push imports models
     n = len(listings)
@@ -147,7 +155,8 @@ def _push_digest(user, kind, listings):
             user,
             title=f"{n} new {kind.label} match{'es' if n != 1 else ''}",
             body=body,
-            data={'type': 'alert_digest', 'kind': kind.push_kind, 'count': n, 'id': first.pk if n == 1 else None},
+            data={'type': 'alert_digest', 'kind': kind.push_kind, 'count': n,
+                  'id': (kind.push_id_of(first) if kind.push_id_of else first.pk) if n == 1 else None},
         )
     except Exception:
         logger.exception(f'Alert push to user {user.pk} failed (email, if any, already sent).')

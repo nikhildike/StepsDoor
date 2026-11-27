@@ -60,6 +60,8 @@ describe('routeForNotification', () => {
     expect(routeForNotification({ type: 'alert_digest', kind: 'job', count: 1, id: 9 })?.params).toEqual({
       screen: 'Jobs', params: { screen: 'JobDetail', params: { jobId: 9 } },
     });
+    // Several matches (or a single company careers job, which has no app screen) open Alerts.
+    expect(routeForNotification({ type: 'alert_digest', kind: 'job', count: 4, id: null })).toEqual({ name: 'Alerts' });
   });
 
   it('ignores unknown payloads', () => {

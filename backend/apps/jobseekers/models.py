@@ -35,10 +35,16 @@ class JobSeeker(models.Model):
 
 
 class SavedJob(models.Model):
-    """A bookmark linking a job seeker to a job post they've saved for later.
+    """A bookmark linking a job seeker to a job they've saved for later.
 
-    Created when a job seeker taps "Save" on a listing; backs the
-    Saved Jobs page in both the web and mobile job-seeker sections.
+    A job can be one of three kinds, and exactly one of the three job fields
+    is set (enforced by a check constraint):
+    - `job_post`: a StepsDoor job posted by a company/contractor (apps.jobs)
+    - `career_job`: an opening read from a company's careers page (apps.careers)
+    - `govt_job`: a government job opening (apps.govtjobs)
+
+    Created when a job seeker taps "Save" on any job card; backs the Saved Jobs
+    page and the dashboard's Saved Jobs count (web and mobile).
     """
     # The job seeker who saved the job; deleting the seeker profile removes their saved jobs.
     # related_name='saved_jobs' lets a JobSeeker instance access seeker.saved_jobs.all().
@@ -47,22 +53,61 @@ class SavedJob(models.Model):
         on_delete=models.CASCADE,
         related_name='saved_jobs',
     )
-    # The job post being saved; deleting the job post removes any bookmarks pointing to it.
-    # related_name='saved_by' lets a JobPost instance access job.saved_by.all().
+    # A saved StepsDoor job post; deleting the post removes bookmarks pointing to it.
     job_post = models.ForeignKey(
         'jobs.JobPost',
         on_delete=models.CASCADE,
         related_name='saved_by',
+        null=True,
+        blank=True,
+    )
+    # A saved company careers-page opening. Closed openings stay saved (shown as closed).
+    career_job = models.ForeignKey(
+        'careers.CareerJob',
+        on_delete=models.CASCADE,
+        related_name='saved_by',
+        null=True,
+        blank=True,
+    )
+    # A saved government job opening. Expired ones stay saved (shown as closed).
+    govt_job = models.ForeignKey(
+        'govtjobs.GovtJob',
+        on_delete=models.CASCADE,
+        related_name='saved_by',
+        null=True,
+        blank=True,
     )
     saved_at = models.DateTimeField(auto_now_add=True)  # Timestamp the bookmark was created; used to order the Saved Jobs list newest-first
 
     class Meta:
         verbose_name = 'Saved Job'
         verbose_name_plural = 'Saved Jobs'
-        # Prevents a job seeker from saving the same job post twice at the DB level;
-        # this is the dedup mechanism — a duplicate save attempt raises an IntegrityError.
-        unique_together = ('job_seeker', 'job_post')
+        constraints = [
+            # Exactly one kind of job per bookmark.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(job_post__isnull=False, career_job__isnull=True, govt_job__isnull=True)
+                    | models.Q(job_post__isnull=True, career_job__isnull=False, govt_job__isnull=True)
+                    | models.Q(job_post__isnull=True, career_job__isnull=True, govt_job__isnull=False)
+                ),
+                name='savedjob_exactly_one_job',
+            ),
+            # A seeker can save each job only once (the API returns the existing bookmark instead).
+            models.UniqueConstraint(fields=['job_seeker', 'job_post'], condition=models.Q(job_post__isnull=False),
+                                    name='savedjob_unique_job_post'),
+            models.UniqueConstraint(fields=['job_seeker', 'career_job'], condition=models.Q(career_job__isnull=False),
+                                    name='savedjob_unique_career_job'),
+            models.UniqueConstraint(fields=['job_seeker', 'govt_job'], condition=models.Q(govt_job__isnull=False),
+                                    name='savedjob_unique_govt_job'),
+        ]
+
+    @property
+    def kind(self):
+        """Which kind of job this bookmark points at: 'job', 'company' or 'govt'."""
+        if self.job_post_id:
+            return 'job'
+        return 'company' if self.career_job_id else 'govt'
 
     def __str__(self):
         """Human-readable label used in the Django admin and shell/debug output."""
-        return f"{self.job_seeker} saved {self.job_post}"
+        return f"{self.job_seeker} saved {self.job_post or self.career_job or self.govt_job}"

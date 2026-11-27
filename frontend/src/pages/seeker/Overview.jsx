@@ -4,8 +4,12 @@
  * Route: `/seeker` or `/seeker/overview` (index route under the seeker account layout).
  * Access: any authenticated user (ProtectedRoute checks token only, not role).
  *
- * Job seekers see: Saved Jobs count, Active Alerts count, New Jobs Today count,
- * a saved-jobs preview, and a latest-job-openings preview.
+ * Job seekers see: stat cards from GET /api/jobseekers/stats/ — Saved Jobs (all
+ * kinds), Active Alerts (with how many open jobs they match) and New Jobs Today
+ * (open jobs added since midnight IST across StepsDoor, company careers pages
+ * and govt jobs) — each linking to its page; "Jobs matching your alerts"
+ * (`AlertMatches`); a saved-jobs preview; govt jobs closing soon; and the latest
+ * StepsDoor job openings.
  *
  * Contractors see: New Tenders count, Tender Alerts count, Open Tenders count,
  * a recent-tenders preview, and a tender-alerts preview — all job-seeker-specific
@@ -21,6 +25,8 @@ import { govtJobService } from '@/services/govtJobService'
 import { deadlineInfo, DEADLINE_BADGE } from '@/utils/deadline'
 import { useAuthStore } from '@/store/authStore'
 import { formatDate } from '@/utils/formatDate'
+import { AlertMatches } from '@/components/alerts/AlertMatches'
+import { useSavedJobs } from '@/hooks/useSavedJobs'
 
 // Maps backend job_type enum values to human-readable labels for display.
 const JOB_TYPE_LABELS = {
@@ -141,12 +147,36 @@ function ContractorDashboard({ name, tenders, tenderAlerts }) {
 }
 
 /**
- * Renders the seeker's personalized dashboard: stat cards, a saved-jobs
- * preview, and a preview of the most recent job listings.
- *
- * @param {{ name: string, savedJobs: Array, alerts: Array, recentJobs: Array }} props
+ * One stat card: icon, label, the number and a short note, linking to the page
+ * that shows the details. `value` is null while the stats are loading.
  */
-function SeekerDashboard({ name, savedJobs, alerts, recentJobs, govtJobs }) {
+function StatCard({ to, icon: Icon, color, label, value, note }) {
+  return (
+    <Link to={to} className="bg-white rounded-xl border border-border p-6 flex items-center gap-4 hover:shadow-md transition-shadow">
+      <div className={`p-3 rounded-lg ${color}`}><Icon className="h-6 w-6 text-white" /></div>
+      <div className="min-w-0">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="text-2xl font-bold">{value == null ? '–' : value.toLocaleString('en-IN')}</p>
+        {note && <p className="text-xs text-muted-foreground truncate">{note}</p>}
+      </div>
+    </Link>
+  )
+}
+
+/**
+ * Renders the seeker's personalized dashboard: stat cards, the jobs matching
+ * their alerts, a saved-jobs preview, govt jobs closing soon and the latest
+ * StepsDoor job openings.
+ *
+ * @param {{ name: string, stats: object|null, savedJobs: Array, recentJobs: Array, govtJobs: Array }} props
+ *   `stats` is the /jobseekers/stats/ response (null while loading or if it failed).
+ */
+function SeekerDashboard({ name, stats, savedJobs, recentJobs, govtJobs }) {
+  const saves = useSavedJobs() // save toggles on the alert matches
+  const today = stats?.new_jobs_today
+  const todayNote = today && today.total > 0
+    ? [today.company && `${today.company} company`, today.govt && `${today.govt} govt`, today.job && `${today.job} StepsDoor`].filter(Boolean).join(' · ')
+    : 'Since midnight'
   return (
     <div className="space-y-8">
       <div>
@@ -154,29 +184,31 @@ function SeekerDashboard({ name, savedJobs, alerts, recentJobs, govtJobs }) {
         <p className="text-muted-foreground mt-1">Here's what's happening with your job search.</p>
       </div>
 
-      {/* Stat cards */}
+      {/* Stat cards — each links to the page with the details. */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-border p-6 flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-blue-500"><Bookmark className="h-6 w-6 text-white" /></div>
-          <div>
-            <p className="text-sm text-muted-foreground">Saved Jobs</p>
-            <p className="text-2xl font-bold">{savedJobs.length}</p>
-          </div>
+        <StatCard to="/seeker/saved" icon={Bookmark} color="bg-blue-500" label="Saved Jobs"
+          value={stats?.saved_jobs} note="Tap the bookmark on any job" />
+        <StatCard to="/seeker/alerts" icon={Bell} color="bg-purple-500" label="Active Alerts"
+          value={stats?.active_alerts}
+          note={stats?.active_alerts ? `${stats.alert_matches.toLocaleString('en-IN')} matching open jobs` : 'Save a keyword to track jobs'} />
+        <StatCard to="/seeker/browse-jobs" icon={Briefcase} color="bg-green-500" label="New Jobs Today"
+          value={today?.total} note={todayNote} />
+      </div>
+
+      {/* Jobs matching the seeker's active alerts (or a prompt to create one). */}
+      <div className="bg-white rounded-xl border border-border">
+        <div className="p-5 border-b flex items-center justify-between">
+          <h2 className="font-semibold flex items-center gap-2"><Bell className="h-4 w-4 text-primary" /> Jobs matching your alerts</h2>
+          <Link to="/seeker/alerts" className="text-sm text-primary hover:underline">Manage alerts</Link>
         </div>
-        <div className="bg-white rounded-xl border border-border p-6 flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-purple-500"><Bell className="h-6 w-6 text-white" /></div>
-          <div>
-            <p className="text-sm text-muted-foreground">Active Alerts</p>
-            <p className="text-2xl font-bold">{alerts.filter(a => a.is_active).length}</p>
+        {stats && stats.active_alerts === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            Save a keyword like &quot;data analyst&quot; and every matching job — StepsDoor, company and government — shows up here.
+            <div className="mt-3"><Link to="/seeker/alerts" className="text-primary hover:underline">Create an alert →</Link></div>
           </div>
-        </div>
-        <div className="bg-white rounded-xl border border-border p-6 flex items-center gap-4">
-          <div className="p-3 rounded-lg bg-green-500"><Briefcase className="h-6 w-6 text-white" /></div>
-          <div>
-            <p className="text-sm text-muted-foreground">New Jobs Today</p>
-            <p className="text-2xl font-bold">{recentJobs.length}+</p>
-          </div>
-        </div>
+        ) : (
+          <AlertMatches limit={5} saves={saves} emptyText="No open jobs match your alerts yet." />
+        )}
       </div>
 
       {/* Saved jobs preview: only rendered when the seeker has at least one saved job. */}
@@ -286,7 +318,7 @@ export default function SeekerOverview() {
   const [profile, setProfile] = useState(null)
   // Seeker-only state.
   const [savedJobs, setSavedJobs] = useState([])
-  const [alerts, setAlerts] = useState([])
+  const [stats, setStats] = useState(null) // /jobseekers/stats/ counts for the stat cards
   const [recentJobs, setRecentJobs] = useState([])
   const [govtJobs, setGovtJobs] = useState([]) // open govt jobs with the nearest deadlines (seekers)
   // Contractor-only state.
@@ -311,18 +343,18 @@ export default function SeekerOverview() {
         setTenderAlerts(ta.data.results ?? ta.data)
       }).finally(() => setLoading(false))
     } else {
-      // Job seekers: profile, saved jobs, job alerts, and recent job listings.
-      // GET /jobseekers/profiles/me/, /jobseekers/saved-jobs/, /alerts/, /jobs/?page_size=5
+      // Job seekers: profile, stat-card counts, saved jobs, and recent job listings.
+      // GET /jobseekers/profiles/me/, /jobseekers/stats/, /jobseekers/saved-jobs/, /jobs/?page_size=5
       // Each request fails on its own (empty section) rather than blanking the dashboard.
       Promise.all([
         seekerService.profile().catch(() => ({ data: null })),
+        seekerService.stats().catch(() => ({ data: null })),
         seekerService.savedJobs().catch(() => ({ data: [] })),
-        seekerService.alerts().catch(() => ({ data: [] })),
         jobService.list({ page_size: 5 }).catch(() => ({ data: [] })),
-      ]).then(([p, s, a, j]) => {
+      ]).then(([p, st, s, j]) => {
         setProfile(p.data)
+        setStats(st.data)
         setSavedJobs(s.data.results ?? s.data)
-        setAlerts(a.data.results ?? a.data)
         setRecentJobs(j.data.results ?? j.data)
       }).finally(() => setLoading(false))
     }
@@ -350,6 +382,6 @@ export default function SeekerOverview() {
   return isContractor ? (
     <ContractorDashboard name={name} tenders={tenders} tenderAlerts={tenderAlerts} />
   ) : (
-    <SeekerDashboard name={name} savedJobs={savedJobs} alerts={alerts} recentJobs={recentJobs} govtJobs={govtJobs} />
+    <SeekerDashboard name={name} stats={stats} savedJobs={savedJobs} recentJobs={recentJobs} govtJobs={govtJobs} />
   )
 }

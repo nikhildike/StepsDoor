@@ -18,7 +18,10 @@ vi.mock('@/services/govtJobService', () => ({
   },
 }))
 vi.mock('@/services/seekerService', () => ({
-  seekerService: { alerts: vi.fn(() => Promise.resolve({ data: [] })) },
+  seekerService: {
+    alerts: vi.fn(() => Promise.resolve({ data: [] })),
+    savedJobs: vi.fn(() => Promise.resolve({ data: [] })),
+  },
 }))
 vi.mock('@/services/tenderService', () => ({
   tenderService: { alerts: vi.fn(() => Promise.resolve({ data: [] })) },

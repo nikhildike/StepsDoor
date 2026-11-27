@@ -1,13 +1,14 @@
 """API views for the `jobseekers` app.
 
 Exposes `JobSeekerViewSet` (profile management, including the `me`
-convenience endpoint) and `SavedJobViewSet` (bookmarking jobs). Both
-are restricted to authenticated job seekers and always scoped to the
+convenience endpoint), `SavedJobViewSet` (bookmarking jobs of any kind) and
+`SeekerStatsView` (dashboard counts). All are restricted to authenticated job seekers and always scoped to the
 requesting user's own data.
 """
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import JobSeeker, SavedJob
 from .serializers import JobSeekerSerializer, SavedJobSerializer
@@ -85,23 +86,56 @@ class SavedJobViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Scope results to the requesting user's saved jobs, newest first.
 
-        select_related pulls in the job post, its company, and the
-        seeker row in the same query to avoid N+1 lookups when
-        serializing the denormalized job/company fields.
+        select_related pulls in every kind of saved job (and its company /
+        careers source) in the same query, avoiding N+1 lookups when the
+        serializer builds the display fields.
         """
         return SavedJob.objects.filter(
             job_seeker__user=self.request.user
-        ).select_related('job_post', 'job_post__company', 'job_seeker').order_by('-saved_at')
+        ).select_related(
+            'job_post', 'job_post__company', 'career_job', 'career_job__source', 'govt_job', 'job_seeker',
+        ).order_by('-saved_at')
 
-    def perform_create(self, serializer):
-        """Attach the bookmark to the authenticated user's seeker profile.
+    def create(self, request, *args, **kwargs):
+        """Save a job (POST with one of job_post / career_job / govt_job); idempotent.
 
-        Called by DRF's CreateModelMixin after validation. Uses
-        `_get_or_create_seeker` because a user may save a job before
-        ever visiting their profile page (no JobSeeker row yet). Note:
-        actual save-then-save duplicate prevention is enforced by the
-        `unique_together` constraint on SavedJob, not here — a repeat
-        save attempt will raise a DB integrity error.
+        Saving a job that's already saved returns the existing bookmark with
+        200 instead of failing, so a double tap can't error. New bookmarks
+        return 201. Uses `_get_or_create_seeker` because a user may save a job
+        before ever visiting their profile page (no JobSeeker row yet).
         """
-        seeker = _get_or_create_seeker(self.request.user)
-        serializer.save(job_seeker=seeker)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        seeker = _get_or_create_seeker(request.user)
+        target = {f: v for f, v in serializer.validated_data.items() if f in ('job_post', 'career_job', 'govt_job')}
+        saved, created = SavedJob.objects.get_or_create(job_seeker=seeker, **target)
+        return Response(self.get_serializer(saved).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class SeekerStatsView(APIView):
+    """GET /api/jobseekers/stats/ — the numbers on the job seeker dashboard's stat cards.
+
+    Returns:
+        {
+          "saved_jobs": int,           # the seeker's saved jobs (all kinds)
+          "active_alerts": int,        # their job alerts that aren't paused
+          "alert_matches": int,        # open jobs matching any active alert (each job once)
+          "new_jobs_today": {"total", "job", "company", "govt"}  # open jobs added since midnight IST
+        }
+    Used by `frontend/src/pages/seeker/Overview.jsx`.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        """Compute the counts for the requesting user."""
+        from apps.alerts.models import JobAlert
+        from .listings import alert_match_querysets, collect_matches, new_today_counts
+
+        alerts = list(JobAlert.objects.filter(job_seeker__user=request.user, is_active=True))
+        matches = collect_matches([alert_match_querysets(a) for a in alerts], limit=0) if alerts else {'count': 0}
+        return Response({
+            'saved_jobs': SavedJob.objects.filter(job_seeker__user=request.user).count(),
+            'active_alerts': len(alerts),
+            'alert_matches': matches['count'],
+            'new_jobs_today': new_today_counts(),
+        })

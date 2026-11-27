@@ -30,5 +30,6 @@ router.register(r'profiles', views.JobSeekerViewSet, basename='jobseeker')
 router.register(r'saved-jobs', views.SavedJobViewSet, basename='savedjob')
 
 urlpatterns = [
+    path('stats/', views.SeekerStatsView.as_view(), name='seeker-stats'),  # dashboard stat cards
     path('', include(router.urls)),
 ]

@@ -375,3 +375,80 @@ class AlertPushTests(TestCase):
         self.assertEqual(message['title'], '2 new tender matches')
         self.assertTrue(message['body'].endswith(' and 1 more'))
         self.assertIsNone(message['data']['id'])
+
+
+@override_settings(FRONTEND_URL='https://stepsdoor.in', ALERT_EMAIL_MAX_ITEMS=20)
+class JobAlertCompanyJobsDigestTests(TestCase):
+    """Job alert digests also carry openings from company careers pages (apps.careers)."""
+
+    def setUp(self):
+        """A job seeker with a 'react developer' alert last checked an hour ago, and a careers source."""
+        from apps.careers.models import CareerSource
+        self.user = User.objects.create_user(username='asha', email='asha@example.com', password='x', is_job_seeker=True)
+        seeker = JobSeeker.objects.create(user=self.user)
+        self.alert = JobAlert.objects.create(job_seeker=seeker, role_keyword='react developer')
+        backdate(self.alert, created_at=timezone.now() - timedelta(days=2), last_checked_at=timezone.now() - timedelta(hours=1))
+        self.source = CareerSource.objects.create(company_name='Razorpay', careers_url='https://razorpay.com/jobs',
+                                                  ats='greenhouse', ats_slug='razorpay')
+
+    def career_job(self, title, **kw):
+        """An active Bengaluru company job, first seen now unless overridden."""
+        from apps.careers.models import CareerJob
+        fields = dict(source=self.source, external_id=title, title=title, location='Bangalore, Karnataka',
+                      cities='|Bengaluru|', apply_url=f'https://boards.greenhouse.io/razorpay/jobs/{len(title)}',
+                      last_seen_at=timezone.now())
+        fields.update(kw)
+        return CareerJob.objects.create(**fields)
+
+    def test_new_company_jobs_are_emailed_and_govt_jobs_are_not(self):
+        """Only company jobs first seen since the last check and still open; govt jobs have their own digest."""
+        new = self.career_job('Senior React Developer')
+        backdate(self.career_job('React Developer (old)'), first_seen_at=timezone.now() - timedelta(days=1))
+        self.career_job('React Developer (closed)', is_active=False)
+        self.career_job('Data Analyst')
+        GovtJob.objects.create(source_portal='upsc.gov.in', job_id='advt:1', title='Junior Developer (React)',
+                               organisation='UPSC', published_at=timezone.now(), source_url='https://upsc.gov.in/')
+
+        self.assertEqual(match_job_alerts()['listings_sent'], 1)
+        body = mail.outbox[0].body
+        self.assertIn('Senior React Developer', body)
+        self.assertIn(new.apply_url, body)
+        self.assertIn('Razorpay · Bengaluru · company careers page', body)
+        self.assertNotIn('UPSC', body)
+        # The next run sends nothing new.
+        self.assertEqual(match_job_alerts()['listings_sent'], 0)
+
+    def test_stepsdoor_post_and_company_job_with_the_same_id_are_both_sent(self):
+        """Dedup is per kind: a JobPost and a CareerJob that share a pk don't hide each other."""
+        employer = User.objects.create_user(username='nimbus', email='hr@nimbus.example', password='x', is_company=True)
+        company = Company.objects.create(user=employer, name='Nimbus Labs', contact_email='hr@nimbus.example')
+        post = JobPost.objects.create(company=company, title='React Developer', description='d', location='HSR',
+                                      city='Bengaluru', job_type='full_time', redirect_url='https://nimbus.example/careers')
+        self.career_job('Senior React Developer', id=post.pk)
+        self.assertEqual(match_job_alerts()['listings_sent'], 2)
+        body = mail.outbox[0].body
+        self.assertIn(f'https://stepsdoor.in/jobs/{post.pk}', body)
+        self.assertIn('Senior React Developer', body)
+
+    def test_push_opens_a_single_stepsdoor_post_but_not_a_company_job(self):
+        """A lone company job has no app screen, so its push carries no id (the app opens Alerts)."""
+        from apps.notifications.models import FCMToken
+        FCMToken.objects.create(user=self.user, token=EXPO_TOKEN)
+        self.career_job('Senior React Developer')
+        with mock.patch('apps.notifications.push.requests.post', return_value=expo_response(OK_TICKET)) as post:
+            match_job_alerts()
+        [message] = post.call_args.kwargs['json']
+        self.assertEqual(message['data'], {'type': 'alert_digest', 'kind': 'job', 'count': 1, 'id': None})
+
+    def test_push_for_a_single_stepsdoor_post_carries_its_id(self):
+        """A lone StepsDoor post still opens directly from the push."""
+        from apps.notifications.models import FCMToken
+        FCMToken.objects.create(user=self.user, token=EXPO_TOKEN)
+        employer = User.objects.create_user(username='nimbus', email='hr@nimbus.example', password='x', is_company=True)
+        company = Company.objects.create(user=employer, name='Nimbus Labs', contact_email='hr@nimbus.example')
+        post = JobPost.objects.create(company=company, title='React Developer', description='d', location='HSR',
+                                      city='Bengaluru', job_type='full_time', redirect_url='https://nimbus.example/careers')
+        with mock.patch('apps.notifications.push.requests.post', return_value=expo_response(OK_TICKET)) as sent:
+            match_job_alerts()
+        [message] = sent.call_args.kwargs['json']
+        self.assertEqual(message['data']['id'], post.pk)

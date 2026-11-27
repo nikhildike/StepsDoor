@@ -38,6 +38,10 @@ urlpatterns = [
     path('api/tenders/', include('apps.tenders.urls')),
     path('api/govtjobs/', include('apps.govtjobs.urls')),
 
+    # Private-company careers jobs read from companies' own ATS feeds
+    # (members only; kept separate from govt jobs — see apps.careers).
+    path('api/careers/', include('apps.careers.urls')),
+
     # Freelancers — freelancer profiles (early-stage app).
     path('api/freelancers/', include('apps.freelancers.urls')),
 

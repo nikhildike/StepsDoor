@@ -82,3 +82,6 @@ desktop.ini
 # ── Misc project files ────────────────────────────────────────────────────────
 StepsDoor.docx
 stepsdoor-tender-module-documentation.md
+
+# Output of `manage.py classify_careers_ats`
+careers_ats.csv

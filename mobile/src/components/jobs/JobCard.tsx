@@ -9,6 +9,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useThemeColors, ThemeColors } from '@/theme/colors';
 import { FontSize, FontWeight } from '@/theme/typography';
 import { BorderRadius, Spacing } from '@/theme/spacing';
+import { SaveJobButton } from './SaveJobButton';
 import { Badge } from '@/components/common/Badge';
 
 // Maps the raw `job_type` API value to a human-readable label shown in
@@ -38,6 +39,8 @@ const JOB_TYPE_LABELS: Record<string, string> = {
  * - `onPress`: handler invoked when the card is tapped — the caller
  *   (list screen) supplies navigation to `JobDetailScreen` with this
  *   job's id.
+ * - `save`: optional `{ saved, pending, onToggle }` — shows a bookmark toggle
+ *   next to the title (omitted for guests and company accounts).
  */
 interface Props {
   job: {
@@ -51,6 +54,7 @@ interface Props {
     created_at: string;
   };
   onPress: () => void;
+  save?: { saved: boolean; pending?: boolean; onToggle: () => void } | null;
 }
 
 /**
@@ -62,14 +66,17 @@ interface Props {
  *
  * Props: see `Props` interface above.
  */
-export function JobCard({ job, onPress }: Props) {
+export function JobCard({ job, onPress, save }: Props) {
   const Colors = useThemeColors();
   const styles = makeStyles(Colors);
   return (
     // Card press -> fires onPress, which the caller wires up to navigate
     // to JobDetailScreen (e.g. navigation.navigate('JobDetail', { id: job.id })).
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
-      <Text style={styles.title} numberOfLines={2}>{job.title}</Text>
+      <View style={styles.header}>
+        <Text style={styles.title} numberOfLines={2}>{job.title}</Text>
+        {save && <SaveJobButton {...save} />}
+      </View>
       <Text style={styles.company}>{job.company_name}</Text>
       <Text style={styles.location}>{job.city}</Text>
       <View style={styles.footer}>
@@ -96,7 +103,8 @@ const makeStyles = (Colors: ThemeColors) => StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  title: { fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.text },
+  header: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing[2] },
+  title: { flex: 1, fontSize: FontSize.base, fontWeight: FontWeight.semibold, color: Colors.text },
   company: { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 4 },
   location: { fontSize: FontSize.sm, color: Colors.textMuted, marginTop: 2 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: Spacing[3] },

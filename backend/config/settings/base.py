@@ -89,6 +89,7 @@ LOCAL_APPS = [
     'apps.notifications',
     'apps.tenders',
     'apps.govtjobs',
+    'apps.careers',  # private-company careers pages (separate from govtjobs)
     'apps.freelancers',
     'apps.stores',
     'apps.services',
@@ -346,6 +347,13 @@ LISTING_STALE_DAYS = config('LISTING_STALE_DAYS', default=14, cast=int)
 # empty the digest is only written to the worker log.
 SCRAPER_ALERT_EMAILS = config('SCRAPER_ALERT_EMAILS', default='', cast=Csv())
 SCRAPER_ALERT_AFTER_FAILURES = config('SCRAPER_ALERT_AFTER_FAILURES', default=3, cast=int)
+
+# Private-company careers jobs (apps.careers). Big employers list thousands of
+# India jobs (Accenture ~30k), so each company contributes at most this many,
+# newest first where the ATS sorts by date.
+CAREER_JOBS_MAX_PER_SOURCE = config('CAREER_JOBS_MAX_PER_SOURCE', default=300, cast=int)
+# fetch_all_career_sources logs at ERROR once a source has failed this many fetches in a row.
+CAREER_ALERT_AFTER_FAILURES = config('CAREER_ALERT_AFTER_FAILURES', default=3, cast=int)
 
 # Public web app URL, used to build links in emails (alert digests link to
 # {FRONTEND_URL}/tenders/<id> etc. and to {FRONTEND_URL}/seeker/alerts to manage alerts).

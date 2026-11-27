@@ -33,6 +33,13 @@ SCHEDULE = {
         5 * 3600,
         'Recruiters post a few openings a week; four runs a day is plenty.',
     ),
+    'Fetch private company careers jobs (twice daily)': (
+        'apps.careers.tasks.fetch_all_career_sources',
+        {'minute': '40', 'hour': '5,17'},
+        {},
+        10 * 3600,
+        "Private companies' own ATS feeds; twice a day keeps listings fresh while staying polite to their sites.",
+    ),
     'Expire stale listings (daily)': (
         'apps.tenders.tasks.expire_stale_listings',
         {'minute': '15', 'hour': '0'},
@@ -74,7 +81,8 @@ SCHEDULE = {
 class Command(BaseCommand):
     """
     `python manage.py setup_scraper_schedule` — idempotently registers the PeriodicTask rows
-    Celery Beat runs: hourly tender scraping, 6-hourly govt job scraping, daily expiry and
+    Celery Beat runs: hourly tender scraping, 6-hourly govt job scraping, twice-daily private-company
+    careers fetching (apps.careers), daily expiry and
     daily alert matching, and a daily failing-scraper alert (see SCHEDULE for times and reasons).
     """
     help = 'Create (or with --reset, restore) the Celery Beat schedule for scrapers, alerts and expiry'

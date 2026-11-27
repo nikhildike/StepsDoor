@@ -8,7 +8,10 @@
  * The backend (apps.notifications.alert_emails._push_digest) sends alert
  * digests as `{ type: 'alert_digest', kind, count, id }` where `kind` is
  * 'tender' | 'govt_job' | 'job' and `id` is set only when exactly one listing
- * matched — then the listing opens directly, otherwise its list does.
+ * matched — then the listing opens directly, otherwise its list does. A job
+ * digest mixes StepsDoor posts and company careers jobs, so its list is the
+ * Alerts screen (every alert's matching jobs); `id` is only sent for a single
+ * StepsDoor post, since company jobs have no screen in the app.
  */
 
 /** A root-navigator target: `navigationRef.navigate(route.name, route.params)`. */
@@ -42,12 +45,9 @@ export function routeForNotification(data: Record<string, unknown> | null | unde
           : { screen: 'Jobs', params: { screen: 'Home', params: { segment: 'govtJobs' } } },
       };
     case 'job':
-      return {
-        name: 'App',
-        params: id
-          ? { screen: 'Jobs', params: { screen: 'JobDetail', params: { jobId: id } } }
-          : { screen: 'Jobs', params: { screen: 'Home', params: { segment: 'jobs' } } },
-      };
+      return id
+        ? { name: 'App', params: { screen: 'Jobs', params: { screen: 'JobDetail', params: { jobId: id } } } }
+        : { name: 'Alerts' }; // root-stack screen listing each alert's matches
     default:
       return null;
   }
